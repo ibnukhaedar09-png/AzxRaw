@@ -1,0 +1,96 @@
+name: Build Flutter APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      jobId:
+        description: 'Job ID'
+        required: true
+        type: string
+      userId:
+        description: 'User ID'
+        required: true
+        type: string
+      payload:
+        description: 'Build Payload (JSON)'
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.16.0'
+          channel: 'stable'
+          cache: true
+          
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+          
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+        
+      - name: Decode Payload
+        id: payload
+        run: |
+          echo '${{ github.event.inputs.payload }}' > payload.json
+          echo "zipAssetUrl=$(jq -r .zipAssetUrl payload.json)" >> $GITHUB_OUTPUT
+          echo "appName=$(jq -r .appName payload.json)" >> $GITHUB_OUTPUT
+          
+      - name: Download Project ZIP
+        run: |
+          echo "📥 Downloading project from: ${{ steps.payload.outputs.zipAssetUrl }}"
+          curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+               -o project.zip \
+               "${{ steps.payload.outputs.zipAssetUrl }}"
+          
+          echo "📦 Extracting project..."
+          mkdir -p project
+          unzip -q project.zip -d project/
+          ls -la project/
+          
+      - name: Flutter Pub Get
+        run: |
+          cd project
+          echo "📦 Installing Flutter dependencies..."
+          flutter pub get
+          
+      - name: Build APK
+        run: |
+          cd project
+          echo "🔨 Building APK..."
+          flutter build apk --release --no-tree-shake-icons
+          
+      - name: Find APK
+        id: find_apk
+        run: |
+          cd project
+          APK_PATH=$(find build/app/outputs/apk/release -name "*.apk" -type f | head -1)
+          if [ -z "$APK_PATH" ]; then
+            echo "❌ No APK found!"
+            exit 1
+          fi
+          echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
+          echo "✅ APK found at: $APK_PATH"
+          
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-${{ github.event.inputs.jobId }}
+          path: ${{ steps.find_apk.outputs.apk_path }}
+          retention-days: 1
+          
+      - name: Success Notification
+        if: success()
+        run: echo "✅ Build successful for job ${{ github.event.inputs.jobId }}"
