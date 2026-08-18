@@ -47,17 +47,45 @@ jobs:
           echo '${{ github.event.inputs.payload }}' > payload.json
           echo "zipAssetUrl=$(jq -r .zipAssetUrl payload.json)" >> $GITHUB_OUTPUT
           echo "appName=$(jq -r .appName payload.json)" >> $GITHUB_OUTPUT
+          echo "✅ Payload decoded successfully"
+          echo "📦 Asset URL: ${{ steps.payload.outputs.zipAssetUrl }}"
           
       - name: Download Project ZIP
         run: |
           echo "📥 Downloading project from: ${{ steps.payload.outputs.zipAssetUrl }}"
-          curl -L -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-               -o project.zip \
-               "${{ steps.payload.outputs.zipAssetUrl }}"
           
+          # Download using GITHUB_TOKEN (built-in token)
+          curl -L \
+            -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            -o project.zip \
+            "${{ steps.payload.outputs.zipAssetUrl }}" \
+            --fail --silent --show-error
+          
+          # Check if download succeeded
+          if [ ! -f project.zip ]; then
+            echo "❌ Download failed - file not found"
+            exit 1
+          fi
+          
+          if [ ! -s project.zip ]; then
+            echo "❌ Download failed - file is empty"
+            exit 1
+          fi
+          
+          echo "✅ Download successful! File size: $(du -h project.zip | cut -f1)"
+          
+          # Extract the project
           echo "📦 Extracting project..."
           mkdir -p project
           unzip -q project.zip -d project/
+          
+          if [ $? -ne 0 ]; then
+            echo "❌ Failed to extract ZIP file"
+            exit 1
+          fi
+          
+          echo "✅ Extraction complete! Contents:"
           ls -la project/
           
       - name: Flutter Pub Get
@@ -66,23 +94,51 @@ jobs:
           echo "📦 Installing Flutter dependencies..."
           flutter pub get
           
+          if [ $? -ne 0 ]; then
+            echo "❌ Flutter pub get failed"
+            exit 1
+          fi
+          
+          echo "✅ Dependencies installed!"
+          
+      - name: Generate Launcher Icons (Optional)
+        run: |
+          cd project
+          if grep -q "flutter_launcher_icons" pubspec.yaml; then
+            echo "🎨 Generating launcher icons..."
+            flutter pub run flutter_launcher_icons || echo "⚠️ Icon generation skipped (optional)"
+          else
+            echo "ℹ️ No flutter_launcher_icons config found, skipping"
+          fi
+          
       - name: Build APK
         run: |
           cd project
           echo "🔨 Building APK..."
           flutter build apk --release --no-tree-shake-icons
           
+          if [ $? -ne 0 ]; then
+            echo "❌ Build failed"
+            exit 1
+          fi
+          
+          echo "✅ Build completed!"
+          
       - name: Find APK
         id: find_apk
         run: |
           cd project
+          echo "🔍 Searching for APK..."
           APK_PATH=$(find build/app/outputs/apk/release -name "*.apk" -type f | head -1)
+          
           if [ -z "$APK_PATH" ]; then
             echo "❌ No APK found!"
             exit 1
           fi
+          
           echo "apk_path=$APK_PATH" >> $GITHUB_OUTPUT
           echo "✅ APK found at: $APK_PATH"
+          echo "📦 APK size: $(du -h "$APK_PATH" | cut -f1)"
           
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
@@ -93,4 +149,12 @@ jobs:
           
       - name: Success Notification
         if: success()
-        run: echo "✅ Build successful for job ${{ github.event.inputs.jobId }}"
+        run: |
+          echo "✅ Build successful for job ${{ github.event.inputs.jobId }}"
+          echo "📱 APK: ${{ steps.find_apk.outputs.apk_path }}"
+          
+      - name: Failure Notification
+        if: failure()
+        run: |
+          echo "❌ Build failed for job ${{ github.event.inputs.jobId }}"
+          exit 1
